@@ -2,13 +2,44 @@
   (:refer-clojure :exclude [declare compile])
   (:require [barnum.events.register :as r]))
 
-(defn
-  ^{:doc "Defines an event dictionary. Pass in a map of event keys and doc strings. It is an error
-to try and register a handler for a key that has not been declared."}
-  declare [m]
-  (-> {}
-      (with-meta {:event-keys (set (keys m)) :help m :compiled false})
-      (into (for [k (keys m)] [k []]))))
+(def registered-events (atom {}))
+
+(defn- ev-extract [fn params]
+  (let [classified (group-by fn params)
+        string (first (classified true))
+        params (classified false)]
+    [string params]))
+
+(defn- ev-get-docstring [params]
+  (ev-extract string? params))
+
+(defn- ev-get-opts [params]
+  (ev-extract map? params))
+
+(defn build-event-def
+  "Builds the structure used internally for event management."
+  [ev]
+  (when (seq ev)
+    (let [[event-key & event-params] ev
+          [docstring event-params] (ev-get-docstring event-params)
+          [opts event-params] (ev-get-opts event-params)]
+      {:key event-key :docstring docstring :options opts :params event-params})))
+
+(defn register-event
+  "Adds an event structure to the registered-events list"
+  [ev]
+  ;; take a vector with the following items, in order:
+  ;;    keyword -- the event name
+  ;;    string [optional] -- event docstring
+  ;;    map [optional] -- event options
+  ;;    & keywords -- used to build the map that will be passed to
+  ;;    event handlers.
+  (let [event-struct (build-event-def ev)
+        key (:key event-struct)]
+    (if-let [existing (:key @registered-events)]
+      (throw (Exception. (str "Duplicate event definition: " key))))
+    (swap registered-events assoc key event-struct))
+  )
 
 (defn
   ^{:doc "Registers a handler for the given event key. The event key can be a single keyword, or
@@ -59,8 +90,6 @@ dictionary has already been compiled."}
   help* [event-map event-key]
   (let [help (:help (meta event-map))]
     (or (event-key help) (str "Unknown event key: " event-key))))
-
-(def ^:dynamic *event-map* (atom nil))
 
 (defn
   ^{:doc "Registers a handler for the given event or set of events."}

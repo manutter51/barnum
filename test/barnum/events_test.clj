@@ -3,8 +3,44 @@
   (:require [midje.sweet :refer :all]
             [barnum.events :refer :all]))
 
-(fact "about declaring event dictionaries"
-      (let [d (declare {:app-start "First event to fire when the app starts" :app-stop "Last event fired before shutdown."})]
-        (:event-keys (meta d)) => #{:app-start :app-stop}
-        (:compiled (meta d)) => falsey
-        (help d :app-start) => "First event to fire when the app starts"))
+(fact "about declaring events"
+      (build-event-def '()) => nil
+      (build-event-def
+       '(:empty-event)) => {:key :empty-event
+                          :docstring nil
+                          :options nil
+                          :params nil}
+       (build-event-def
+        '(:empty-event
+          "a docstring")) => {:key :empty-event
+                            :docstring "a docstring"
+                            :options nil
+                            :params nil}
+        (build-event-def
+         '(:event-opt
+           {:min-handlers 1})) => {:key :event-opt
+                                 :docstring nil
+                                 :options {:min-handlers 1}
+                                 :params nil}
+         (build-event-def
+          '(:event-params
+            :time :flux :foo)) => {:key :event-params
+                                 :docstring nil
+                                 :options nil
+                                   :params [:time :flux :foo]}
+            (build-event-def
+             '(:event-doc-opt
+               "a docstring"
+               {:min-handlers 1})) => {:key :event-doc-opt
+                                       :docstring "a docstring"
+                                       :options {:min-handlers 1}
+                                       :params nil}
+               (build-event-def
+                '(:event-all
+                  "a docstring"
+                  {:min-handlers 1}
+                  :time :flux :foo)) => {:key :event-all
+                                         :docstring "a docstring"
+                                         :options {:min-handlers 1}
+                                         :params [:time :flux :foo]})
+
