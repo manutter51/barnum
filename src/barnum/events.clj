@@ -18,27 +18,25 @@
 
 (defn build-event-def
   "Builds the structure used internally for event management."
-  [ev]
-  (when (seq ev)
-    (let [[event-key & event-params] ev
-          [docstring event-params] (ev-get-docstring event-params)
-          [opts event-params] (ev-get-opts event-params)]
-      {:key event-key :docstring docstring :options opts :params event-params})))
+  [event-key event-params]
+  (let [[docstring event-params] (ev-get-docstring event-params)
+        [opts event-params] (ev-get-opts event-params)]
+    {:key event-key :docstring docstring :options opts :params event-params}))
 
 (defn register-event
   "Adds an event structure to the registered-events list"
-  [ev]
+  [event-key & params]
   ;; take a vector with the following items, in order:
   ;;    keyword -- the event name
   ;;    string [optional] -- event docstring
   ;;    map [optional] -- event options
   ;;    & keywords -- used to build the map that will be passed to
   ;;    event handlers.
-  (let [event-struct (build-event-def ev)
+  (let [event-struct (build-event-def event-key params)
         key (:key event-struct)]
-    (if-let [existing (:key @registered-events)]
-      (throw (Exception. (str "Duplicate event definition: " key))))
-    (swap registered-events assoc key event-struct))
+    (if-let [existing (key @registered-events)]
+      (throw (Exception. (str "Duplicate event definition: " key (:docstring existing)))))
+    (swap! registered-events assoc key event-struct))
   )
 
 (defn
@@ -94,19 +92,19 @@ dictionary has already been compiled."}
 (defn
   ^{:doc "Registers a handler for the given event or set of events."}
   register-handler [event-key handler-fn]
-  (swap! *event-map* register-handler* event-key handler-fn)
+  (comment (swap! registered-events register-handler* event-key handler-fn))
   handler-fn)
 
 (defn ^{:doc "Triggers an event asynchronously."}
   trigger [event-key & args]
-  (apply trigger* @*event-map* event-key args))
+  (apply trigger* @registered-events event-key args))
 
 (defn ^{:doc "Returns the result of polling all the event handlers for the given event key"}
   poll [event-key & args]
-  (apply poll* @*event-map* event-key args))
+  (apply poll* @registered-events event-key args))
 
 (defmacro with-events [event-map & body]
-  `(binding [*event-map* (atom (barnum.events/declare ~event-map))]
+  `(binding [registered-events (atom (barnum.events/declare ~event-map))]
      ~@body))
 
 
