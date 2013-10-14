@@ -1,8 +1,8 @@
-(ns barnum.events
-  (:refer-clojure :exclude [declare compile])
-  (:require [barnum.events.register :as r]))
+(ns barnum.events)
 
 (def registered-events (atom {}))
+(def registered-handlers (atom {}))
+(def tmp-handlers (atom {}))
 
 (defn- ev-extract [fn params]
   (let [classified (group-by fn params)
@@ -39,72 +39,60 @@
     (swap! registered-events assoc key event-struct))
   )
 
-(defn
-  ^{:doc "Registers a handler for the given event key. The event key can be a single keyword, or
+(defn register-handler
+  "Registers a handler for the given event key. The event key can be a single keyword, or
 a set of keywords, to match any of the contained keys, or a regex pattern, to match any key
 whose name matches the regex. For any given key, the handlers will be called in the order
 they were defined. Handler functions take two args. The first will be a response map, containing
 the response of the previous handler, initially {}. The second will be a vector of any additional
-arguments given when the event is triggered"}
-  register-handler* [event-map event-key handler-fn]
-  (r/register-handler event-map event-key handler-fn))
+arguments given when the event is triggered"
+  [event-key handler-fn]
+  (swap! registered-handlers event-key (conj
+                                        (or (event-key registered-handlers)
+                                            [])
+                                        handler-fn)))
 
-(defn ^{:doc "Removes the given handler from the given event key(s). The event key can be a
+(defn remove-handler
+  "Removes the given handler from the given event key(s). The event key can be a
 single keyword, or a set of keywords, to match any of the contained keys, or a regex pattern,
-to match any key whose name matches the regex."}
-  remove-handler* [event-map event-key handler-fn]
+to match any key whose name matches the regex."
+  [event-map event-key handler-fn]
   (r/remove-handler event-map event-key handler-fn))
 
-(defn
-  ^{:doc "Triggers the event corresponding to the given key, which must be a single keyword.
+(defn trigger
+  "Triggers the event corresponding to the given key, which must be a single keyword.
 Any additional arguments will be passed to each of the registered handlers. The trigger
-function returns immediately; event processing is handled in a different thread."}
-  trigger* [event-map event-key & args]
+function returns immediately; event processing is handled in a different thread."
+  [event-map event-key & args]
   ;; TODO implement this method
   nil
   )
 
-(defn
-  ^{:doc "Triggers the event corresponding to the given key, which must be a single keyword.
+(defn poll
+  "Triggers the event corresponding to the given key, which must be a single keyword.
 Any additional arguments will be passed to each of the registered handlers. The poll
 function does not return until all handlers have been called on the function, and returns
-the result of the last handler that was called."}
-  poll* [event-map event-key & args]
+the result of the last handler that was called."
+  [event-key & args]
   ;; TODO implement this method
   nil
   )
 
-(defn
-  ^{:doc "Compiles the event dictionary for faster processing. Does nothing if the
-dictionary has already been compiled."}
-  compile* [event-map]
+(defn build
+  "Compiles the event dictionary for faster processing. Does nothing if the
+dictionary has already been compiled."
+  []
   ;; TODO implement this method
   nil
   )
 
-(defn
-  ^{:doc "Returns the help string that was provided when the event was declared."
-    }
-  help* [event-map event-key]
-  (let [help (:help (meta event-map))]
-    (or (event-key help) (str "Unknown event key: " event-key))))
-
-(defn
-  ^{:doc "Registers a handler for the given event or set of events."}
-  register-handler [event-key handler-fn]
-  (comment (swap! registered-events register-handler* event-key handler-fn))
-  handler-fn)
-
-(defn ^{:doc "Triggers an event asynchronously."}
-  trigger [event-key & args]
-  (apply trigger* @registered-events event-key args))
-
-(defn ^{:doc "Returns the result of polling all the event handlers for the given event key"}
-  poll [event-key & args]
-  (apply poll* @registered-events event-key args))
-
-(defmacro with-events [event-map & body]
-  `(binding [registered-events (atom (barnum.events/declare ~event-map))]
-     ~@body))
+(defn doc
+  "Returns the doc string that was provided when the event was declared."  
+  [event-key]
+  (if-let [event (event-key registered-events)]
+    (let [docstring (:docstring event)
+          line1 (apply str event-key (:params event))]
+      (str line1 "\n" docstring))
+    (str "Unknown event " event-key)))
 
 
