@@ -16,3 +16,13 @@ present in the map that gets passed to registered event handlers when
 the event is fired or polled."
   [event-key & params]
   (apply ev/register-event event-key params))
+
+(defn register-handler
+  "Registers a handler for the given event key(s). The event key can be a single keyword, or
+a set of keywords, to match any of the contained keys. For any given key, the handlers will
+be called in the order they were defined unless you explicitly set the handler order using
+order-handlers. Handler functions take two args. The first will be a map containing the keys
+given when the event was defined, and their values. The second will be a response map,
+containing the response of the previous handler, initially {}."
+  [event-key handler-key handler-fn]
+  (ev/register-handler event-key handler-key handler-fn))

@@ -1,7 +1,7 @@
 (ns barnum.events)
 
 (def registered-events (atom {}))
-(def registered-handlers (atom {}))
+(def registered-handlers (ref {}))
 (def tmp-handlers (atom {}))
 
 (defn- ev-extract [fn params]
@@ -26,8 +26,7 @@
 (defn register-event
   "Adds an event structure to the registered-events list"
   [event-key & params]
-  ;; take a vector with the following items, in order:
-  ;;    keyword -- the event name
+  ;; takes the event name plus a vector with the following items, in order:
   ;;    string [optional] -- event docstring
   ;;    map [optional] -- event options
   ;;    & keywords -- used to build the map that will be passed to
@@ -36,28 +35,39 @@
         key (:key event-struct)]
     (if-let [existing (key @registered-events)]
       (throw (Exception. (str "Duplicate event definition: " key (:docstring existing)))))
-    (swap! registered-events assoc key event-struct))
-  )
+    (swap! registered-events assoc key event-struct)))
 
+(defn- key->pred [key]
+  (cond
+   (keyword? key) #(= key %)
+   (set? key) #(key %)
+   (instance? java.util.regex.Pattern key) #(re-find key %)
+   :else (throw (Exception. "Event key must be a keyword, set, or regular expression."))))
+
+(declare register-handlers)
 (defn register-handler
-  "Registers a handler for the given event key. The event key can be a single keyword, or
-a set of keywords, to match any of the contained keys, or a regex pattern, to match any key
-whose name matches the regex. For any given key, the handlers will be called in the order
-they were defined. Handler functions take two args. The first will be a response map, containing
-the response of the previous handler, initially {}. The second will be a vector of any additional
-arguments given when the event is triggered"
-  [event-key handler-fn]
-  (swap! registered-handlers event-key (conj
-                                        (or (event-key registered-handlers)
-                                            [])
-                                        handler-fn)))
+  [event-key handler-key handler-fn]
+  ;; TODO Don't allow same handler tag more than once for the same
+  ;; event
+  (if (set? event-key)
+    (register-handlers event-key handler-key handler-fn)
+    (if (nil? (event-key @registered-events))
+      (throw (Exception. (str "Cannot register handler " handler-key " for unknown event " event-key)))
+      (dosync (let [handlers (or (event-key @registered-handlers) [])
+                    handlers (conj handlers [handler-key handler-fn])]
+                (commute registered-handlers assoc event-key handlers ))
+              @registered-handlers))))
+
+(defn register-handlers [event-keys handler-key handler-fn]
+  (doseq [event-key event-keys]
+    (register-handler event-key handler-key handler-fn)))
 
 (defn remove-handler
   "Removes the given handler from the given event key(s). The event key can be a
 single keyword, or a set of keywords, to match any of the contained keys, or a regex pattern,
 to match any key whose name matches the regex."
   [event-map event-key handler-fn]
-  (r/remove-handler event-map event-key handler-fn))
+  nil)
 
 (defn trigger
   "Triggers the event corresponding to the given key, which must be a single keyword.
@@ -86,10 +96,10 @@ dictionary has already been compiled."
   nil
   )
 
-(defn doc
+(defn docstring
   "Returns the doc string that was provided when the event was declared."  
   [event-key]
-  (if-let [event (event-key registered-events)]
+  (if-let [event (event-key @registered-events)]
     (let [docstring (:docstring event)
           line1 (apply str event-key (:params event))]
       (str line1 "\n" docstring))
