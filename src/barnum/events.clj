@@ -31,31 +31,27 @@
   ;;    map [optional] -- event options
   ;;    & keywords -- used to build the map that will be passed to
   ;;    event handlers.
+  ;; TODO Add option for cycle detection -- number of time event can
+  ;; appear in backtrace before triggering a "Cycle detected" error
   (let [event-struct (build-event-def event-key params)
         key (:key event-struct)]
     (if-let [existing (key @registered-events)]
       (throw (Exception. (str "Duplicate event definition: " key (:docstring existing)))))
     (swap! registered-events assoc key event-struct)))
 
-(defn- key->pred [key]
-  (cond
-   (keyword? key) #(= key %)
-   (set? key) #(key %)
-   (instance? java.util.regex.Pattern key) #(re-find key %)
-   :else (throw (Exception. "Event key must be a keyword, set, or regular expression."))))
-
 (declare register-handlers)
 (defn register-handler
   [event-key handler-key handler-fn]
-  ;; TODO Don't allow same handler tag more than once for the same
-  ;; event
   (if (set? event-key)
     (register-handlers event-key handler-key handler-fn)
     (if (nil? (event-key @registered-events))
       (throw (Exception. (str "Cannot register handler " handler-key " for unknown event " event-key)))
       (dosync (let [handlers (or (event-key @registered-handlers) [])
+                    existing (filter #(= handler-key (first %)) handlers)
                     handlers (conj handlers [handler-key handler-fn])]
-                (commute registered-handlers assoc event-key handlers ))
+                (if (empty? existing)
+                  (commute registered-handlers assoc event-key handlers )
+                  (throw (Exception. (str "Duplicate event handler " handler-key " for event " event-key)))))
               @registered-handlers))))
 
 (defn register-handlers [event-keys handler-key handler-fn]
