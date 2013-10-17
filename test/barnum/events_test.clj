@@ -44,3 +44,57 @@
                                        :options {:min-handlers 1}
                                        :params [:time :flux :foo]})
 
+
+(with-state-changes [(before :facts
+                             (do
+                               (register-event :e1 "Event 1" :data)
+                               (register-event :e2 "Event 2" :data)
+                               (register-event :e3 "Event 3" :data)
+                               (register-event :e4 "Event 4" :data)
+                               (register-event :e5 "Event 5" :data)))
+                     (after :facts
+                            (do
+                              (dosync (ref-set registered-handlers {}))
+                              (reset! registered-events {})))]
+
+  (fact "You can't add the same event twice"
+        (register-event :e1 "Event 1" :data) => (throws Exception "Duplicate event definition: :e1 Event 1"))
+  
+  (fact "You can add a handler to an event"
+        (register-handler :e1 :h1 identity)
+        (let [handlers (:e1 @registered-handlers)
+              handler1 (first handlers)]
+          (count handlers) => 1
+          (first handler1) => :h1
+          (second handler1) => identity))
+
+  (fact "You cannot add a handler to an undefined event"
+        )
+
+  (fact "You cannot add the same handler twice"
+        (register-handler :e1 :h1 identity)
+        (register-handler :e1 :h1 identity) => (throws Exception "Duplicate event handler :h1 for event :e1"))
+
+  (fact "You can add the same handler to more than one event"
+        (register-handler #{:e1 :e2} :h1 identity)
+        (let [e1 (:e1 @registered-handlers)
+              e2 (:e2 @registered-handlers)
+              e1 (first e1)
+              e2 (first e2)]
+          (first e1) => :h1
+          (first e2) => :h1
+          (second e1) => identity
+          (second e2) => identity))
+
+  (fact "Handlers are stored in the order they were added, by default"
+        )
+
+  (fact "You can re-arrange the order of handlers using order-first"
+        )
+
+  (fact "You can re-arrange the order of handlers using order-last"
+        )
+
+
+  
+  )

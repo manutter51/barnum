@@ -36,7 +36,7 @@
   (let [event-struct (build-event-def event-key params)
         key (:key event-struct)]
     (if-let [existing (key @registered-events)]
-      (throw (Exception. (str "Duplicate event definition: " key (:docstring existing)))))
+      (throw (Exception. (str "Duplicate event definition: " key " " (:docstring existing)))))
     (swap! registered-events assoc key event-struct)))
 
 (declare register-handlers)
@@ -74,14 +74,22 @@
          (recur next-key remaining-keys extracted remaining-handlers)))))
 
 (defn order-first
-  [key-list handlers]
-  (let [[extracted leftover] (extract-handlers key-list handlers)]
-    (concat extracted leftover)))
+  [event-key handler-key-list]
+  (dosync
+   (let [handlers (or (event-key @registered-handlers) [])
+         [extracted leftover] (extract-handlers handler-key-list handlers)
+         handlers (concat extracted leftover)]
+     (when-not (empty? handlers)
+       (commute registered-handlers assoc event-key handlers)))))
 
 (defn order-last
-  [key-list handlers]
-  (let [[extracted leftover] (extract-handlers key-list handlers)]
-    (concat leftover extracted)))
+  [event-key handler-key-list]
+  (dosync
+   (let [handlers (or (event-key @registered-handlers) [])
+         [extracted leftover] (extract-handlers handler-key-list handlers)
+         handlers (concat leftover extracted)]
+     (when-not (empty? handlers)
+       (commute registered-handlers assoc event-key handlers)))))
 
 (defn remove-handler
   "Removes the given handler from the given event key(s). The event key can be a
