@@ -6,9 +6,9 @@
 
 (defn- ev-extract [fn params]
   (let [classified (group-by fn params)
-        string (first (classified true))
+        tgt (first (classified true))
         params (classified false)]
-    [string params]))
+    [tgt params]))
 
 (defn- ev-get-docstring [params]
   (ev-extract string? params))
@@ -57,6 +57,31 @@
 (defn register-handlers [event-keys handler-key handler-fn]
   (doseq [event-key event-keys]
     (register-handler event-key handler-key handler-fn)))
+
+(defn add-extracted [extracted found]
+  (vec (filter identity (conj extracted found))))
+
+(defn extract-handlers
+  ([key-list handlers]
+     (extract-handlers (first key-list) (rest key-list) [] handlers))
+  ([current-key key-list extracted handlers]
+     (let [[found remaining-handlers] (ev-extract #(= current-key (first %)) handlers)
+           extracted (add-extracted extracted found)
+           next-key (first key-list)
+           remaining-keys (rest key-list)]
+       (if (nil? next-key)
+         [extracted remaining-handlers]
+         (recur next-key remaining-keys extracted remaining-handlers)))))
+
+(defn order-first
+  [key-list handlers]
+  (let [[extracted leftover] (extract-handlers key-list handlers)]
+    (concat extracted leftover)))
+
+(defn order-last
+  [key-list handlers]
+  (let [[extracted leftover] (extract-handlers key-list handlers)]
+    (concat leftover extracted)))
 
 (defn remove-handler
   "Removes the given handler from the given event key(s). The event key can be a
