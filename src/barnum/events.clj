@@ -4,23 +4,31 @@
 (def registered-handlers (ref {}))
 (def tmp-handlers (atom {}))
 
-(defn- ev-extract [fn params]
-  (let [classified (group-by fn params)
-        tgt (first (classified true))
-        params (classified false)]
-    [tgt params]))
-
 (defn- ev-get-docstring [params]
-  (ev-extract string? params))
+  (let [docstring (first params)
+        docstring (if (string? docstring) docstring)
+        params (if docstring
+                 (next params)
+                 params)]
+    [docstring params]))
 
 (defn- ev-get-opts [params]
-  (ev-extract map? params))
+  (let [opts (first params)
+        opts (if (map? opts) opts)
+        params (if opts
+                 (next params)
+                 params)
+        params (if (seq params)
+                 (vec params))]
+    [opts params]))
 
 (defn build-event-def
   "Builds the structure used internally for event management."
   [event-key event-params]
   (let [[docstring event-params] (ev-get-docstring event-params)
         [opts event-params] (ev-get-opts event-params)]
+    (if-not (every? keyword? event-params)
+      (throw (Exception. "Event params must all be keywords")))
     {:key event-key :docstring docstring :options opts :params event-params}))
 
 (defn register-event
@@ -33,6 +41,8 @@
   ;;    event handlers.
   ;; TODO Add option for cycle detection -- number of time event can
   ;; appear in backtrace before triggering a "Cycle detected" error
+  (if-not (keyword? event-key)
+    (throw (Exception. "Event key must be a keyword")))
   (let [event-struct (build-event-def event-key params)
         key (:key event-struct)]
     (if-let [existing (key @registered-events)]
@@ -42,17 +52,18 @@
 (declare register-handlers)
 (defn register-handler
   [event-key handler-key handler-fn]
-  (if (set? event-key)
-    (register-handlers event-key handler-key handler-fn)
-    (if (nil? (event-key @registered-events))
-      (throw (Exception. (str "Cannot register handler " handler-key " for unknown event " event-key)))
-      (dosync (let [handlers (or (event-key @registered-handlers) [])
-                    existing (filter #(= handler-key (first %)) handlers)
-                    handlers (conj handlers [handler-key handler-fn])]
-                (if (empty? existing)
-                  (commute registered-handlers assoc event-key handlers )
-                  (throw (Exception. (str "Duplicate event handler " handler-key " for event " event-key)))))
-              @registered-handlers))))
+  (cond (set? event-key) (register-handlers event-key handler-key handler-fn)
+        (keyword? event-key)
+        (if (nil? (event-key @registered-events))
+          (throw (Exception. (str "Cannot register handler " handler-key " for unknown event " event-key)))
+          (dosync (let [handlers (or (event-key @registered-handlers) [])
+                        existing (filter #(= handler-key (first %)) handlers)
+                        handlers (conj handlers [handler-key handler-fn])]
+                    (if (empty? existing)
+                      (commute registered-handlers assoc event-key handlers )
+                      (throw (Exception. (str "Duplicate event handler " handler-key " for event " event-key)))))
+                  @registered-handlers))
+        :else (throw (Exception. "Event key must be a keyword or a set of keywords."))))
 
 (defn register-handlers [event-keys handler-key handler-fn]
   (doseq [event-key event-keys]
@@ -60,6 +71,12 @@
 
 (defn add-extracted [extracted found]
   (vec (filter identity (conj extracted found))))
+
+(defn- ev-extract [fn params]
+  (let [classified (group-by fn params)
+        tgt (first (classified true))
+        params (classified false)]
+    [tgt params]))
 
 (defn extract-handlers
   ([key-list handlers]
