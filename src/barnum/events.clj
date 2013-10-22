@@ -165,15 +165,15 @@ that have errors."
                   num-handlers (count handlers)
                   errors []
                   errors (if (< num-handlers min-handlers)
-                           (conj errors (str event-key
+                           (conj errors (str "The " event-key
                                              " event needs at least "
-                                             min-handlers " handlers, has "
+                                             min-handlers " handler(s), has "
                                              num-handlers))
                            errors)
                   errors (if (> num-handlers max-handlers)
-                           (conj errors (str event-key
-                                             "event can have at most "
-                                             max-handlers " handlers, has "
+                           (conj errors (str "The " event-key
+                                             " event can have at most "
+                                             max-handlers " handler(s), has "
                                              num-handlers))
                            errors)]
               (if (empty? errors)
@@ -186,7 +186,7 @@ single keyword. Any additional arguments will be passed to each of the
 registered handlers. The trigger function returns immediately; event
 processing is handled in a different thread."
   [event-map event-key & args]
-  ;; TODO implement this method
+  ;; TODO implement this method using agents
   nil
   )
 
@@ -197,17 +197,17 @@ registered handlers. The poll function does not return until all handlers
 have been called on the function, and returns the result of the last
 handler that was called."
   [event-key & args]
-  ;; TODO implement this method
+  ;; TODO implement this method inline
   nil
   )
 
-(defn build
-  "Compiles the event dictionary for faster processing. Does nothing if the
-dictionary has already been compiled."
-  []
-  ;; TODO implement this method
-  nil
-  )
+(comment (defn build
+   "Compiles the event dictionary for faster processing. Does nothing if the
+dictionary has already been compiled. Probably not needed."
+   []
+   ;; TODO implement this method
+   nil
+   ))
 
 (defn docs
   "Returns the doc string that was provided when the event was declared."  

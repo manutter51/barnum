@@ -239,3 +239,32 @@
 )
 
 ;; event handler check function
+(with-state-changes [(before :facts
+                             (do
+                               (register-event :e1 "Event 1"
+                                               {:max-handlers 2}
+                                               :data)
+                               (register-event :e2 "Event 2" :data)
+                               (register-event :e3 "Event 2"
+                                               {:min-handlers 1} :data)
+                               (register-handler #{:e1 :e2} :h1 identity)
+                               (register-handler :e1 :h2 identity)
+                               (register-handler :e1 :h3 identity)
+                               (register-handler :e2 :h4 identity)))
+                     (after :facts
+                            (do
+                              (dosync (ref-set registered-handlers {}))
+                              (reset! registered-events {})))]
+
+  (fact "The check function returns correct messages for events with too many or too few handlers"
+        (let [errors (check)]
+          
+          (:e1 errors)
+          => ["The :e1 event can have at most 2 handler(s), has 3"]
+
+          (:e2 errors) => nil
+
+          (:e3 errors)
+          => ["The :e3 event needs at least 1 handler(s), has 0"]))
+  )
+
