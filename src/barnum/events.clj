@@ -1,4 +1,8 @@
-(ns barnum.events)
+(ns barnum.events
+  (:require [clojure.set :as set]
+            [beanbag.core :refer [ok skip fail beanbag? when-result]]))
+
+;; TODO: write built-in validation functions
 
 (def registered-events (atom {}))
 (def registered-handlers (ref {}))
@@ -11,6 +15,12 @@
                  (next params)
                  params)]
     [docstring params]))
+
+;; Possible options are:
+;;  * min-handlers -- minimum number of handlers required
+;;  * max-handlers -- maximum number of handlers allowed
+;;  * validation-fn -- function to validate args when fired
+;;  * defaults -- map of defaults for each param if not nil
 
 (defn- ev-get-opts [params]
   (let [opts (first params)
@@ -42,7 +52,7 @@
   ;;    map [optional] -- event options
   ;;    & keywords -- used to build the map that will be passed to
   ;;    event handlers.
-  ;; TODO Add option for cycle detection -- number of time event can
+  ;; TODO Add option for cycle detection -- number of times event can
   ;; appear in backtrace before triggering a "Cycle detected" error
   (if-not (keyword? event-key)
     (throw (Exception. "Event key must be a keyword")))
@@ -180,30 +190,67 @@ that have errors."
                 nil
                 [event-key errors]))))))
 
-(defn trigger
-  "Triggers the event corresponding to the given key, which must be a
-single keyword. Any additional arguments will be passed to each of the
-registered handlers. The trigger function returns immediately; event
-processing is handled in a different thread."
-  [event-map event-key & args]
-  ;; TODO implement this method using agents
-  nil
-  )
+(defn validate-params
+  "Check for a validation function and call it on the args, if present."
+  [event args]
+  (let [options (:options event)
+        validate-fn (:validate-fn options)
+        params (:params event)]
+    (when (fn? validate-fn)
+      (validate-fn params args))))
 
-(defn poll
+(defn run*
+  "Call each handler in turn, accumulating the results of each handler
+called, and returning a seq of beanbag results, in reverse order of
+execution (i.e. the first item will be the result of the last handler
+called)."
+  ([handlers args] (run* handlers args '()))
+  ([handlers args results]
+     (let [handler (first handlers)
+           [handler-fn handler-key] handler
+           handlers (rest handlers)
+           run-args (assoc args
+                      :_handler handler-key
+                      :_called-at (java.util.Date.))]
+       (if (nil? handler-fn)
+         results
+         (when-result
+          result (handler-fn run-args)
+          :ok (run* handlers args (conj results (ok result)))
+          :ok-stop (conj results (ok result))
+          :fail (run* handlers args (conj results (fail result)))
+          :abort (conj results (fail result))
+          :skip (run* handlers args (conj results (skip result)))
+          (run* handlers args (conj results (ok :ok-unknown result))))))))
+
+(defn fire
   "Triggers the event corresponding to the given key, which must be a
 single keyword. Any additional arguments will be passed to each of the
-registered handlers. The poll function does not return until all handlers
-have been called on the function, and returns the result of the last
-handler that was called."
+registered handlers. Returns a future that derefs to the accumulated
+results of calling each of the handlers in turn."
   [event-key & args]
-  ;; TODO implement this method inline
-  nil
-  )
+  (let [event (or (event-key @registered-events)
+                  (throw (Exception. (str "Event not defined: " event-key))))
+        handlers (event-key @registered-handlers)
+        num-handlers (count handlers)]
+    (future
+      (if (> num-handlers 0)
+        (let [defaults (or (:defaults (:options event)) {})
+              args (apply hash-map args)
+              validation-errors (validate-params event args)
+              ok? (empty? validation-errors)
+              args (when ok? (merge defaults args))
+              args (assoc args :event event-key)]
+          (if ok?
+            (run* handlers args)
+            (fail validation-errors)))
+        ;; else if no handlers
+        (skip (str "No handlers for event " event-key))))))
 
 (comment (defn build
    "Compiles the event dictionary for faster processing. Does nothing if the
-dictionary has already been compiled. Probably not needed."
+dictionary has already been compiled. Might not be needed; I'm thinking
+of using it to pre-compile the list of arguments and/or validation checks."
    []
    ;; TODO implement this method
    nil
