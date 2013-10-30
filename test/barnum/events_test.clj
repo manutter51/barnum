@@ -297,11 +297,13 @@
 
 (with-state-changes [(before :facts
                              (do
+                               (println "Resetting state")
                                (dosync
                                 (ref-set registered-handlers {}))
                                (reset! registered-events {})
                                (reset! *some-state* "")
-                               (register-event :e1 "Event 1" :data)))]
+                               (register-event :e1 "Event 1" :data)
+                               (println "State reset")))]
   
   (fact
    "Handlers fire in the order they are defined."
@@ -312,5 +314,45 @@
          block @handler-result]
      @*some-state*
      => "ABC"))
+
+  (fact
+   "A handler can return a stop value that will prevent subsequent handlers from firing."
+   (register-handler :e1 :h1 appends-A-and-continues)
+   (register-handler :e1 :h2 appends-D-and-stops)
+   (register-handler :e1 :h3 appends-C-and-continues)
+   (let [handler-result (fire :e1 :data "")
+         block @handler-result]
+     @*some-state*
+     => "AD"))
+
+  (fact
+   "A handler can return an abort result that will prevent subsequent handlers from firing."
+   (register-handler :e1 :h1 appends-A-and-continues)
+   (register-handler :e1 :h2 always-aborts)
+   (register-handler :e1 :h3 appends-C-and-continues)
+   (let [handler-result (fire :e1 :data "")
+         block @handler-result]
+     @*some-state*
+     => "A"))
+  
+  (fact
+   "A handler can return a skip result that will NOT prevent subsequent handlers from firing."
+   (register-handler :e1 :h1 appends-A-and-continues)
+   (register-handler :e1 :h2 always-skips)
+   (register-handler :e1 :h3 appends-C-and-continues)
+   (let [handler-result (fire :e1 :data "")
+         block @handler-result]
+     @*some-state*
+     => "AC"))
+  
+  (fact
+   "A handler can return a fail result that will NOT prevent subsequent handlers from firing."
+   (register-handler :e1 :h1 appends-A-and-continues)
+   (register-handler :e1 :h2 always-fails)
+   (register-handler :e1 :h3 appends-C-and-continues)
+   (let [handler-result (fire :e1 :data "")
+         block @handler-result]
+     @*some-state*
+     => "AC"))
   )
 
