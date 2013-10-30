@@ -1,6 +1,6 @@
 (ns barnum.events
   (:require [clojure.set :as set]
-            [beanbag.core :refer [ok skip fail beanbag? when-result]]))
+            [beanbag.core :refer [ok skip fail beanbag? cond-result]]))
 
 ;; TODO: write built-in validation functions
 
@@ -65,6 +65,7 @@
     (swap! registered-events assoc key event-struct)))
 
 (declare register-handlers)
+;; TODO --- alias add-handler for register-handler
 (defn register-handler
   [event-key handler-key handler-fn]
   (cond (set? event-key) (register-handlers event-key handler-key handler-fn)
@@ -156,6 +157,8 @@ the contained keys."
   (doseq [event-key event-keys]
     (remove-handler event-key handler-fn)))
 
+;; TODO --- add replace-handler
+
 (defn check
   "Checks the current event map and ensures that each event has at least
 the minimum number of handlers specified in the min-handlers option, but
@@ -204,24 +207,26 @@ that have errors."
 called, and returning a seq of beanbag results, in reverse order of
 execution (i.e. the first item will be the result of the last handler
 called)."
-  ([handlers args] (run* handlers args '()))
+  ([handlers args]
+     (run* handlers args '()))
   ([handlers args results]
      (let [handler (first handlers)
-           [handler-fn handler-key] handler
+           [handler-key handler-fn] handler
            handlers (rest handlers)
            run-args (assoc args
                       :_handler handler-key
                       :_called-at (java.util.Date.))]
        (if (nil? handler-fn)
          results
-         (when-result
-          result (handler-fn run-args)
-          :ok (run* handlers args (conj results (ok result)))
-          :ok-stop (conj results (ok result))
-          :fail (run* handlers args (conj results (fail result)))
-          :abort (conj results (fail result))
-          :skip (run* handlers args (conj results (skip result)))
-          (run* handlers args (conj results (ok :ok-unknown result))))))))
+           (cond-result
+            result (handler-fn run-args)
+            :ok (recur handlers args (conj results (ok result)))
+            :ok-stop (conj results (ok result))
+            :fail (recur handlers args (conj results (fail result)))
+            :abort (conj results (fail result))
+            :skip (recur handlers args (conj results (skip result)))
+            (recur handlers args (conj results
+                                       (ok :ok-unknown result))))))))
 
 (defn fire
   "Triggers the event corresponding to the given key, which must be a
@@ -233,8 +238,9 @@ results of calling each of the handlers in turn."
                   (throw (Exception. (str "Event not defined: " event-key))))
         handlers (event-key @registered-handlers)
         num-handlers (count handlers)]
-    (future
-      (if (> num-handlers 0)
+    (do ;; future
+      (if (zero? num-handlers)
+        (skip (str "No handlers for event " event-key))
         (let [defaults (or (:defaults (:options event)) {})
               args (apply hash-map args)
               validation-errors (validate-params event args)
@@ -242,10 +248,8 @@ results of calling each of the handlers in turn."
               args (when ok? (merge defaults args))
               args (assoc args :event event-key)]
           (if ok?
-            (run* handlers args)
-            (fail validation-errors)))
-        ;; else if no handlers
-        (skip (str "No handlers for event " event-key))))))
+            (future (run* handlers args))
+            (fail validation-errors)))))))
 
 (comment (defn build
    "Compiles the event dictionary for faster processing. Does nothing if the

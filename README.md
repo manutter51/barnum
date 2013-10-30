@@ -1,6 +1,9 @@
 # barnum
 
-A Clojure library designed to ... well, that part is up to you.
+The barnum event engine provides a generic library for defining arbitrary
+events, assigning handlers to those events, and firing events. Event firing
+is asynchronous, but returns a future, so you can have event handlers that
+return a result that you process synchronously.
 
 ## Usage
 

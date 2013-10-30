@@ -1,7 +1,10 @@
 (ns barnum.events-test
   (:refer-clojure :exclude [declare compile])
   (:require [midje.sweet :refer :all]
-            [barnum.events :refer :all]))
+            [barnum.events :refer :all]
+            [beanbag.core :refer [ok fail skip]]))
+
+(def ^{:dynamic true} *some-state* (atom nil))
 
 (fact "about declaring events"
       (build-event-def
@@ -266,5 +269,48 @@
 
           (:e3 errors)
           => ["The :e3 event needs at least 1 handler(s), has 0"]))
+  )
+
+;; firing event handlers
+;;   -- generic handlers
+
+(defn appends-A-and-continues [args]
+  (ok (swap! *some-state* str "A")))
+
+(defn appends-B-and-continues [args]
+  (ok (swap! *some-state* str "B")))
+
+(defn appends-C-and-continues [args]
+  (ok (swap! *some-state* str "C")))
+
+(defn appends-D-and-stops [args]
+  (ok :ok-stop (swap! *some-state* str "D")))
+
+(defn always-fails [args]
+  (fail "This handler always fails"))
+
+(defn always-aborts [args]
+  (fail :abort "This handler always aborts"))
+
+(defn always-skips [args]
+  (skip "This handler always skips"))
+
+(with-state-changes [(before :facts
+                             (do
+                               (dosync
+                                (ref-set registered-handlers {}))
+                               (reset! registered-events {})
+                               (reset! *some-state* "")
+                               (register-event :e1 "Event 1" :data)))]
+  
+  (fact
+   "Handlers fire in the order they are defined."
+   (register-handler :e1 :h1 appends-A-and-continues)
+   (register-handler :e1 :h2 appends-B-and-continues)
+   (register-handler :e1 :h3 appends-C-and-continues)
+   (let [handler-result (fire :e1 :data "")
+         block @handler-result]
+     @*some-state*
+     => "ABC"))
   )
 
