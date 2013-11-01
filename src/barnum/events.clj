@@ -16,6 +16,12 @@
                  params)]
     [docstring params]))
 
+(defn- get-defaults
+  [params user-defaults]
+  (let [auto-defaults (into {}
+                            (for [param params] [param nil]))]
+    (merge auto-defaults user-defaults)))
+
 ;; Possible options are:
 ;;  * min-handlers -- minimum number of handlers required
 ;;  * max-handlers -- maximum number of handlers allowed
@@ -30,7 +36,11 @@
                  params)
         params (if (seq params)
                  (vec params))]
-    [opts params]))
+    [(or opts {}) params]))
+
+(defn- build-defaults [opts params]
+  (assoc opts :defaults
+         (get-defaults params (or (:defaults opts) {}))))
 
 (defn build-event-def
   "Builds the structure used internally for event management."
@@ -41,12 +51,12 @@
       (throw (Exception. "Event params must all be keywords")))
     {:key event-key
      :docstring docstring
-     :options opts
+     :options (build-defaults opts event-params)
      :params event-params}))
 
 (defn register-event
   "Adds an event structure to the registered-events list"
-  [event-key & params]
+  [event-key params]
   ;; takes the event name plus a vector with the following items, in order:
   ;;    string [optional] -- event docstring
   ;;    map [optional] -- event options
@@ -65,7 +75,6 @@
     (swap! registered-events assoc key event-struct)))
 
 (declare register-handlers)
-;; TODO --- alias add-handler for register-handler
 (defn register-handler
   [event-key handler-key handler-fn]
   (cond (set? event-key) (register-handlers event-key handler-key handler-fn)
@@ -157,7 +166,32 @@ the contained keys."
   (doseq [event-key event-keys]
     (remove-handler event-key handler-fn)))
 
-;; TODO --- add replace-handler
+(defn- replacer
+  [handler-key handler-fn]
+  (fn [[current-key current-fn]]
+    (if (= current-key handler-key)
+      [current-key handler-fn]
+      [current-key current-fn])))
+
+(declare replace-handlers)
+(defn replace-handler
+  "Replaces the matching handler (if any) with the new function. If the function has not been set as a handler for the given event(s), then no replacement will take place."
+  [event-key handler-key handler-fn]
+  (cond (set? event-key) (replace-handlers event-key handler-key handler-fn)
+        (keyword? event-key)
+        (dosync
+         (let [handlers (event-key @registered-handlers)
+               handlers (doall (map (replacer handler-key handler-fn)
+                                    handlers))]
+           (commute registered-handlers
+                    assoc event-key handlers)))
+        :else (throw (Exception.
+                      "Event key must be a keyword or a set of keywords."))))
+
+(defn replace-handlers
+  [event-keys handler-key handler-fn]
+  (doseq [event-key event-keys]
+    (replace-handler event-key handler-key handler-fn)))
 
 (defn check
   "Checks the current event map and ensures that each event has at least
@@ -233,23 +267,22 @@ called)."
 single keyword. Any additional arguments will be passed to each of the
 registered handlers. Returns a future that derefs to the accumulated
 results of calling each of the handlers in turn."
-  [event-key & args]
+  [event-key args]
   (let [event (or (event-key @registered-events)
                   (throw (Exception. (str "Event not defined: " event-key))))
         handlers (event-key @registered-handlers)
         num-handlers (count handlers)]
-    (do ;; future
-      (if (zero? num-handlers)
-        (skip (str "No handlers for event " event-key))
-        (let [defaults (or (:defaults (:options event)) {})
-              args (apply hash-map args)
-              validation-errors (validate-params event args)
-              ok? (empty? validation-errors)
-              args (when ok? (merge defaults args))
-              args (assoc args :event event-key)]
-          (if ok?
-            (future (run* handlers args))
-            (fail validation-errors)))))))
+    (if (zero? num-handlers)
+      (skip (str "No handlers for event " event-key))
+      (let [defaults (or (:defaults (:options event)) {})
+            args (merge defaults args)
+            validation-errors (validate-params event args)
+            ok? (empty? validation-errors)
+            args (when ok? )
+            args (assoc args :event event-key)]
+        (if ok?
+          (future (run* handlers args))
+          (fail validation-errors))))))
 
 (comment (defn build
    "Compiles the event dictionary for faster processing. Does nothing if the

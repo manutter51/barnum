@@ -1,94 +1,41 @@
-(ns barnum.events-test
-  (:refer-clojure :exclude [declare compile])
+(ns barnum.api-test
   (:require [midje.sweet :refer :all]
-            [barnum.events :refer :all]
+            [barnum.api :refer :all]
+            [barnum.events :refer [registered-events registered-handlers]]
             [beanbag.core :refer [ok fail skip]]))
 
 (def ^{:dynamic true} *some-state* (atom nil))
 
-(fact "about declaring events"
-      (build-event-def
-       :empty-event
-       '())
-      => {:key :empty-event
-          :docstring nil
-          :options {:defaults {}}
-          :params nil}
-      
-      (build-event-def
-       :empty-event
-       '("a docstring"))
-      => {:key :empty-event
-          :docstring "a docstring"
-          :options {:defaults {}}
-          :params nil}
-      
-      (build-event-def
-       :event-opt
-       '({:min-handlers 1}))
-      => {:key :event-opt
-          :docstring nil
-          :options {:defaults {}, :min-handlers 1}
-          :params nil}
-      
-      (build-event-def
-       :event-params
-       '(:time :flux :foo))
-      => {:key :event-params
-          :docstring nil
-          :options {:defaults {:flux nil, :foo nil, :time nil}}
-          :params [:time :flux :foo]}
-
-      (build-event-def
-       :event-doc-opt
-       '("a docstring"
-         {:min-handlers 1}))
-      => {:key :event-doc-opt
-          :docstring "a docstring"
-          :options {:defaults {},  :min-handlers 1}
-          :params nil}
-      
-      (build-event-def
-       :event-all
-       '("a docstring"
-         {:min-handlers 1}
-         :time :flux :foo))
-      => {:key :event-all
-          :docstring "a docstring"
-          :options {:defaults {:flux nil, :foo nil, :time nil},
-                    :min-handlers 1}
-          :params [:time :flux :foo]})
-
 (fact "Event key must be a keyword"
-      (register-event "e1" ["Event 1" :data])
+      (add-event "e1" "Event 1" :data)
       => (throws Exception "Event key must be a keyword")
       
-      (register-event 'e1 ["Event 1" :data])
+      (add-event 'e1 "Event 1" :data)
       => (throws Exception "Event key must be a keyword")
       
-      (register-event #{:e1} ["Event 1" :data])
+      (add-event #{:e1} "Event 1" :data)
       => (throws Exception "Event key must be a keyword")
       
-      (register-event [:e1] ["Event 1" :data])
+      (add-event [:e1] "Event 1" :data)
       => (throws Exception "Event key must be a keyword")
       
-      (register-event '(:e1) ["Event 1" :data])
+      (add-event '(:e1) "Event 1" :data)
       => (throws Exception "Event key must be a keyword"))
 
 (fact "Event params must be keywords"
-      (register-event :e9 ["Event 9" :data "foo"])
+      (add-event :e9 "Event 9" :data "foo")
       => (throws Exception "Event params must all be keywords")
       
-      (register-event :e9 ["Event 9" :data 'foo])
+      (add-event :e9 "Event 9" :data 'foo)
       => (throws Exception "Event params must all be keywords")
       
-      (register-event :e9 ["Event 9" :data #{:foo}])
+      (add-event :e9 "Event 9" :data #{:foo})
       => (throws Exception "Event params must all be keywords")
       
-      (register-event :e9 ["Event 9" :data [:foo]])
+      (add-event :e9 "Event 9" :data [:foo])
       => (throws Exception "Event params must all be keywords")
       
-      (register-event :e9 ["Event 9" :data '(:foo)])
+      (add-event :e9 "Event 9" :data '(:foo))
       => (throws Exception "Event params must all be keywords"))
 
 ;; Adding handlers
@@ -96,18 +43,18 @@
                              (do
                                (dosync (ref-set registered-handlers {}))
                                (reset! registered-events {})
-                               (register-event :e1 ["Event 1" :data])
-                               (register-event :e2 ["Event 2" :data])
-                               (register-event :e3 ["Event 3" :data])
-                               (register-event :e4 ["Event 4" :data])
-                               (register-event :e5 ["Event 5" :data])))]
+                               (add-event :e1 "Event 1" :data)
+                               (add-event :e2 "Event 2" :data)
+                               (add-event :e3 "Event 3" :data)
+                               (add-event :e4 "Event 4" :data)
+                               (add-event :e5 "Event 5" :data)))]
   
   (fact "You can't add the same event twice"
-        (register-event :e1 ["Event 1" :data])
+        (add-event :e1 "Event 1" :data)
         => (throws Exception "Duplicate event definition: :e1 Event 1"))
   
   (fact "You can add a handler to an event"
-        (register-handler :e1 :h1 identity)
+        (add-handler :e1 :h1 identity)
         (let [handlers (:e1 @registered-handlers)
               handler1 (first handlers)]
           (count handlers) => 1
@@ -115,17 +62,17 @@
           (second handler1) => identity))
   
   (fact "You cannot add a handler to an undefined event"
-        (register-handler :no-such-event :h1 identity)
+        (add-handler :no-such-event :h1 identity)
         => (throws Exception
                    "Cannot register handler :h1 for unknown event :no-such-event"))
 
   (fact "You cannot add the same handler twice"
-        (register-handler :e1 :h1 identity)
-        (register-handler :e1 :h1 identity)
+        (add-handler :e1 :h1 identity)
+        (add-handler :e1 :h1 identity)
         => (throws Exception "Duplicate event handler :h1 for event :e1"))
 
   (fact "You can add the same handler to more than one event"
-        (register-handler #{:e1 :e2} :h1 identity)
+        (add-handler #{:e1 :e2} :h1 identity)
         (let [e1 (:e1 @registered-handlers)
               e2 (:e2 @registered-handlers)
               e1 (first e1)
@@ -136,16 +83,16 @@
           (second e2) => identity))
 
   (fact "The event-key arg must be a keyword or a set of keywords."
-        (register-handler '(:e1 :e2) :h1 identity)
+        (add-handler '(:e1 :e2) :h1 identity)
         => (throws Exception
                    "Event key must be a keyword or a set of keywords.")
-        (register-handler [:e1 :e2] :h1 identity)
+        (add-handler [:e1 :e2] :h1 identity)
         => (throws Exception
                    "Event key must be a keyword or a set of keywords.")
-        (register-handler "e1" :h1 identity)
+        (add-handler "e1" :h1 identity)
         => (throws Exception
                    "Event key must be a keyword or a set of keywords.")
-        (register-handler 'e1 :h1 identity)
+        (add-handler 'e1 :h1 identity)
         => (throws Exception
                    "Event key must be a keyword or a set of keywords."))
 )
@@ -155,12 +102,12 @@
                              (do
                               (dosync (ref-set registered-handlers {}))
                               (reset! registered-events {})
-                              (register-event :e1 ["Event 1" :data])
-                              (register-handler :e1 :h1 identity)
-                              (register-handler :e1 :h2 identity)
-                              (register-handler :e1 :h3 identity)
-                              (register-handler :e1 :h4 identity)
-                              (register-handler :e1 :h5 identity)))]
+                              (add-event :e1 "Event 1" :data)
+                              (add-handler :e1 :h1 identity)
+                              (add-handler :e1 :h2 identity)
+                              (add-handler :e1 :h3 identity)
+                              (add-handler :e1 :h4 identity)
+                              (add-handler :e1 :h5 identity)))]
   
   (fact "Handlers are stored in the order they were added, by default"
         (vec (map first (:e1 @registered-handlers)))
@@ -188,14 +135,14 @@
                              (do
                                (dosync (ref-set registered-handlers {}))
                                (reset! registered-events {})
-                               (register-event :e1 ["Event 1" :data])
-                               (register-event :e2 ["Event 2" :data])
-                               (register-event :e3 ["Event 3" :data])
-                               (register-handler #{:e1 :e2 :e3} :h1 identity)
-                               (register-handler #{:e1 :e3} :h2 identity)
-                               (register-handler :e2 :h3 identity)
-                               (register-handler :e2 :h4 identity)
-                               (register-handler :e3 :h5 identity)))]
+                               (add-event :e1 "Event 1" :data)
+                               (add-event :e2 "Event 2" :data)
+                               (add-event :e3 "Event 3" :data)
+                               (add-handler #{:e1 :e2 :e3} :h1 identity)
+                               (add-handler #{:e1 :e3} :h2 identity)
+                               (add-handler :e2 :h3 identity)
+                               (add-handler :e2 :h4 identity)
+                               (add-handler :e3 :h5 identity)))]
   
   (fact "You can remove one handler from one event without affecting other handlers or events"
         (remove-handler :e1 :h1)
@@ -256,16 +203,16 @@
                              (do
                                (dosync (ref-set registered-handlers {}))
                                (reset! registered-events {})
-                               (register-event :e1 ["Event 1"
-                                                    {:max-handlers 2}
-                                                    :data])
-                               (register-event :e2 ["Event 2" :data])
-                               (register-event :e3 ["Event 2"
-                                                    {:min-handlers 1} :data])
-                               (register-handler #{:e1 :e2} :h1 identity)
-                               (register-handler :e1 :h2 identity)
-                               (register-handler :e1 :h3 identity)
-                               (register-handler :e2 :h4 identity)))]
+                               (add-event :e1 "Event 1"
+                                          {:max-handlers 2}
+                                          :data)
+                               (add-event :e2 "Event 2" :data)
+                               (add-event :e3 "Event 2"
+                                          {:min-handlers 1} :data)
+                               (add-handler #{:e1 :e2} :h1 identity)
+                               (add-handler :e1 :h2 identity)
+                               (add-handler :e1 :h3 identity)
+                               (add-handler :e2 :h4 identity)))]
 
   (fact "The check function returns correct messages for events with too many or too few handlers"
         (let [errors (check)]
@@ -309,54 +256,54 @@
                                 (ref-set registered-handlers {}))
                                (reset! registered-events {})
                                (reset! *some-state* "")
-                               (register-event :e1 [ "Event 1" :data])))]
+                               (add-event :e1 "Event 1" :data)))]
   
   (fact
    "Handlers fire in the order they are defined."
-   (register-handler :e1 :h1 appends-A-and-continues)
-   (register-handler :e1 :h2 appends-B-and-continues)
-   (register-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 {:data ""})
+   (add-handler :e1 :h1 appends-A-and-continues)
+   (add-handler :e1 :h2 appends-B-and-continues)
+   (add-handler :e1 :h3 appends-C-and-continues)
+   (let [handler-result (fire :e1 :data "")
          block @handler-result]
      @*some-state*
      => "ABC"))
 
   (fact
    "A handler can return a stop value that will prevent subsequent handlers from firing."
-   (register-handler :e1 :h1 appends-A-and-continues)
-   (register-handler :e1 :h2 appends-D-and-stops)
-   (register-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 {:data ""})
+   (add-handler :e1 :h1 appends-A-and-continues)
+   (add-handler :e1 :h2 appends-D-and-stops)
+   (add-handler :e1 :h3 appends-C-and-continues)
+   (let [handler-result (fire :e1 :data "")
          block @handler-result]
      @*some-state*
      => "AD"))
 
   (fact
    "A handler can return an abort result that will prevent subsequent handlers from firing."
-   (register-handler :e1 :h1 appends-A-and-continues)
-   (register-handler :e1 :h2 always-aborts)
-   (register-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 {:data ""})
+   (add-handler :e1 :h1 appends-A-and-continues)
+   (add-handler :e1 :h2 always-aborts)
+   (add-handler :e1 :h3 appends-C-and-continues)
+   (let [handler-result (fire :e1 :data "")
          block @handler-result]
      @*some-state*
      => "A"))
   
   (fact
    "A handler can return a skip result that will NOT prevent subsequent handlers from firing."
-   (register-handler :e1 :h1 appends-A-and-continues)
-   (register-handler :e1 :h2 always-skips)
-   (register-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 {:data ""})
+   (add-handler :e1 :h1 appends-A-and-continues)
+   (add-handler :e1 :h2 always-skips)
+   (add-handler :e1 :h3 appends-C-and-continues)
+   (let [handler-result (fire :e1 :data "")
          block @handler-result]
      @*some-state*
      => "AC"))
   
   (fact
    "A handler can return a fail result that will NOT prevent subsequent handlers from firing."
-   (register-handler :e1 :h1 appends-A-and-continues)
-   (register-handler :e1 :h2 always-fails)
-   (register-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 {:data ""})
+   (add-handler :e1 :h1 appends-A-and-continues)
+   (add-handler :e1 :h2 always-fails)
+   (add-handler :e1 :h3 appends-C-and-continues)
+   (let [handler-result (fire :e1 :data "")
          block @handler-result]
      @*some-state*
      => "AC"))
