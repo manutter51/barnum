@@ -17,6 +17,11 @@ same event more than once."
   [event-key & params]
   (ev/register-event event-key (vec params)))
 
+(defn event-keys
+  "Returns a list of all currently defined event keys."
+  []
+  (keys @ev/registered-events))
+
 (defn add-handler
   "Registers a handler for the given event key(s). The event key can be a
 single keyword, or a set of keywords, to match any of the contained keys.

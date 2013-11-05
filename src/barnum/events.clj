@@ -42,6 +42,12 @@
   (assoc opts :defaults
          (get-defaults params (or (:defaults opts) {}))))
 
+(defn- ev-get-params [params]
+  (if (and (vector? (first params))
+           (nil? (rest params)))
+    (first params)
+    params))
+
 (defn build-event-def
   "Builds the structure used internally for event management."
   [event-key event-params]
@@ -62,8 +68,6 @@
   ;;    map [optional] -- event options
   ;;    & keywords -- used to build the map that will be passed to
   ;;    event handlers.
-  ;; TODO Add option for cycle detection -- number of times event can
-  ;; appear in backtrace before triggering a "Cycle detected" error
   (if-not (keyword? event-key)
     (throw (Exception. "Event key must be a keyword")))
   (let [event-struct (build-event-def event-key params)
@@ -248,8 +252,7 @@ called)."
            [handler-key handler-fn] handler
            handlers (rest handlers)
            run-args (assoc args
-                      :_handler handler-key
-                      :_called-at (java.util.Date.))]
+                      :_handler handler-key)]
        (if (nil? handler-fn)
          results
            (cond-result
@@ -279,19 +282,12 @@ results of calling each of the handlers in turn."
             validation-errors (validate-params event args)
             ok? (empty? validation-errors)
             args (when ok? )
-            args (assoc args :event event-key)]
+            args (assoc args
+                   :_event event-key
+                   :_fired-at (java.util.Date.))]
         (if ok?
           (future (run* handlers args))
           (fail validation-errors))))))
-
-(comment (defn build
-   "Compiles the event dictionary for faster processing. Does nothing if the
-dictionary has already been compiled. Might not be needed; I'm thinking
-of using it to pre-compile the list of arguments and/or validation checks."
-   []
-   ;; TODO implement this method
-   nil
-   ))
 
 (defn docs
   "Returns the doc string that was provided when the event was declared."  
