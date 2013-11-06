@@ -5,6 +5,6 @@ handlers for them, and fire them."
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.5.1"]
-                 [beanbag "0.2.3-SNAPSHOT"]]
+                 [beanbag "0.2.3"]]
   :profiles {:dev {:dependencies [[midje "1.6-beta1"]]
                    :plugins [[lein-midje "3.1.1"]]}})
