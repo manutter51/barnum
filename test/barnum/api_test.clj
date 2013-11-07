@@ -97,7 +97,7 @@
                    "Event key must be a keyword or a set of keywords."))
 )
 
-;; Reordering handlers
+;; Managing handlers
 (with-state-changes [(before :facts
                              (do
                               (dosync (ref-set registered-handlers {}))
@@ -109,6 +109,11 @@
                               (add-handler :e1 :h4 identity)
                               (add-handler :e1 :h5 identity)))]
   
+  (fact "The handler-keys function returns the current list of handler
+keys, in order"
+        (handler-keys :e1)
+        => (exactly [:h1 :h2 :h3 :h4 :h5]))
+
   (fact "Handlers are stored in the order they were added, by default"
         (vec (map first (:e1 @registered-handlers)))
         => (exactly [:h1 :h2 :h3 :h4 :h5]))

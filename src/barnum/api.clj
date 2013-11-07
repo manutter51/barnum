@@ -22,6 +22,12 @@ same event more than once."
   []
   (keys @ev/registered-events))
 
+(defn handler-keys
+  "Returns a list of all currently defined handler keys for the given event.
+Throws an exception if the specified event does not exist."
+  [event-key]
+  (ev/handler-keys event-key))
+
 (defn add-handler
   "Registers a handler for the given event key(s). The event key can be a
 single keyword, or a set of keywords, to match any of the contained keys.

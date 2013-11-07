@@ -3,7 +3,7 @@
 The Barnum event engine provides a generic library for defining arbitrary
 events, assigning handlers to those events, and firing events. Event firing
 is asynchronous, but returns a future, so you can have event handlers that
-return a result that you process synchronously.
+return a result that you process whenever you like.
 
 [![Build Status](https://travis-ci.org/manutter51/barnum.png)](https://travis-ci.org/manutter51/barnum.png)
 
@@ -64,7 +64,7 @@ sure the params and param values are correct.
 
 The params argument lists the parameters that can/should/must be given
 as parameters for the event when the event fires. Each event handler takes
-a parameter map as its argument, and the map's keys should correspond to
+this parameter map as its argument, and the map's keys should correspond to
 the params given when the event is defined. For convenience, the params
 can be specified either as a vector of keywords, a symbol containing a
 vector of keywords, or as in-line keywords.
@@ -100,9 +100,12 @@ three additional parameters:
 
 You can use `(ev/remove-handler event-key handler-key)` to remove a handler,
 or `(ev/replace-handler event-key handler-key new-fn)` to replace an
-existing handler. You cannot register the same handler key more than once 
-for the same event but you could, if needed, register the same function
-under more than one handler key.
+existing handler. To add a handler and overwrite any existing handler that
+might be using the same key, use `(ev/add-or-replace-handler event-key handler-key handler-fn)`.
+
+You cannot register the same handler key more than once for the same event 
+but you could, if needed, register the same function under more than one 
+handler key.
 
 If you want to register the same handler for multiple events, pass a set of
 event keys as the first argument to `add-handler`. For example, to log all
@@ -122,9 +125,10 @@ subsequent handlers should be called.
 
 [Beanbag][1] is a very small library for wrapping function call results 
 inside a tuple along with a status key. Barnum uses beanbags to return both
-data as calculated by the handler, and also metadata indicating whether
+data as calculated by the handler, and also a status key indicating whether
 the handler completed successfully, encountered an error, or skipped any
-processing of the event for benign reasons.
+processing of the event for benign reasons. The status key can also 
+indicate whether or not subsequent event handlers should be called.
 
 [1]: https://github.com/manutter51/beanbag
 
@@ -169,6 +173,39 @@ in order to prevent subsequent handlers from being called.
 Inside a handler function, you can do anything you like, including firing
 off other events. 
 
+### Managing event handlers
+
+Use the `check` function to make sure the handlers you have assigned to
+your events match the constraints on the events. The `check` function
+returns a map of event keys mapped to a list of error messages for that
+event, or an empty map if there are no errors.
+
+    (if-let [event-errors (ev/check)]
+      (report-errors event-errors)
+      (proceed-with-application))
+
+For any given event, you can control the order in which the handlers
+are executed by using the `order-first` and `order-last` functions. The
+`order-first` function takes an event key and a list of handler keys, and
+re-orders the handlers to match the order you specify. Any handler keys
+that are not in the list will be executed after the keys you did specify,
+in their original order.
+
+The `order-last` function works the same way, except that any keys you do
+not specify will be executed *before* the keys you do specify.
+
+    ;; Example: Event :e1 has handlers :h1 :h2 :h3 :h4 and :h5
+    (ev/order-first :e1 [:h4 :h2]) ; ==> :h4 :h2 :h1 :h3 :h5
+
+    ;; Example: Event :e1 has handlers :h1 :h2 :h3 :h4 and :h5
+    (ev/order-last :e1 [:h4 :h2]) ; ==> :h1 :h3 :h5 :h4 :h2
+
+Use the `handler-keys` function to get a list of the current handlers,
+in order, for any given event.
+
+    (let [h-keys (ev/handler-keys :event-1)]
+      (do-something-with-keys h-keys))
+
 ### Triggering events
 
 To trigger an event and execute its associated handlers, use the `fire`
@@ -181,10 +218,28 @@ The `fire` function returns a future representing the collected results
 returned by the handlers for that event, in last-to-first order. To get
 the result of the last handler to fire, just call `first` on the seq.
 
-## TODO
+### Validating event parameters
 
- * Add a mechanism for sharing data between handlers?
- * Document re-ordering event handlers.
+You can write custom validation functions to be used whenever an event
+is fired, to check the parameters being passed along with the event. This
+validation function should take two arguments: `params` and `args`. The
+`params` argument is the list of parameters specified when the event was
+defined, and the `args` argument is a map of key-value pairs where the key
+is one of the params, and the value is the data associated with that key
+at the time the event was fired. Return a list of validation errors, if 
+any, or nil if there were no errors.
+
+To assign a validation function to an event, provide the function as the
+`:validation-fn` key in the options map when you initially add the event.
+
+    (require '[barnum.events.validation :refer [require-all]])
+    (add-event :e1 "My Event" {:validation-fn require-all} [:arg1 :arg2])
+
+Barnum includes the following predefined validation functions, in the
+`barnum.events.validation` namespace:
+
+ * `require-all` -- fails if any keys in the `params` list do not occur in the `args` map
+ * `restrict-all` -- fails if any key in the `args` map is not in the `params` list
 
 ## License
 

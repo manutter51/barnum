@@ -103,6 +103,10 @@
   (doseq [event-key event-keys]
     (register-handler event-key handler-key handler-fn)))
 
+(defn handler-keys [event-key]
+  (let [handlers (event-key @registered-handlers)]
+    (map first handlers)))
+
 (defn add-extracted [extracted found]
   (vec (filter identity (conj extracted found))))
 
