@@ -238,7 +238,7 @@ To assign a validation function to an event, provide the function as the
 Barnum includes the following predefined validation functions, in the
 `barnum.events.validation` namespace:
 
- * `require-all` -- fails if any keys in the `params` list do not occur in the `args` map
+ * `require-all` -- fails if any args from the params list have values that are nil
  * `restrict-all` -- fails if any key in the `args` map is not in the `params` list
 
 ## License
