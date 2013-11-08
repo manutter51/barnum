@@ -16,20 +16,18 @@
     (when (not= found marker)
       k)))
 
-;; TODO: this test is worthless, because we provide default keys
-;; for any param that's not specified. Replace this with a test
-;; for all params not-nil
 (defn require-all
-  "Returns a list containing the keys for all missing parameters,
-or an empty list if all keys in the params list are present as keys
-in the args list"
+  "Returns a list containing all parameters in the args list whose value is
+nil, or returns an empty list if all keys from the params list have values
+that are not nil."
   [params args]
-  (map #(format "Missing key :%s " (name %))
-       (filter #(not (has-key? args %)) params)))
+  (map #(format "Required value missing for key :%s" (name %))
+       (filter #(nil? (% args)) params)))
 
 (defn restrict-all
   "Returns a list of all keys in the args map that are not in the
-params list"
+params list, or an empty list if the args map does not contain any
+keys beyond those specified in the params list."
   [params args]
   (let [args (dissoc args :_event :_handler :_fired-at) ; ignore built-ins
         arg-keys-set (into #{} (keys args))

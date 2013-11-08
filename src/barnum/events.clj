@@ -239,10 +239,10 @@ that have errors."
   "Check for a validation function and call it on the args, if present."
   [event args]
   (let [options (:options event)
-        validate-fn (:validate-fn options)
+        validation-fn (:validation-fn options)
         params (:params event)]
-    (when (fn? validate-fn)
-      (validate-fn params args))))
+    (when (fn? validation-fn)
+      (validation-fn params args))))
 
 (defn run*
   "Call each handler in turn, accumulating the results of each handler
@@ -289,9 +289,10 @@ results of calling each of the handlers in turn."
             args (assoc args
                    :_event event-key
                    :_fired-at (java.util.Date.))]
-        (if ok?
-          (future (run* handlers args))
-          (fail validation-errors))))))
+        (future
+          (if ok?
+            (run* handlers args)
+            (fail validation-errors)))))))
 
 (defn docs
   "Returns the doc string that was provided when the event was declared."  
