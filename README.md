@@ -10,7 +10,7 @@ return a result that you process whenever you like.
 ## Installation
 
 To use the Barnum event engine in your project, add the following to the
-`dependencies` in your `project.clj` file:
+dependencies in your `project.clj` file:
 
     ["barnum" "0.1.0"]
 
