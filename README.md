@@ -145,8 +145,8 @@ handler.
           (ok (str "Data is " data))
           (fail "Data was nil"))))
 
-Barnum actually checks for a few different status keys besides the generic
-`ok`, `skip`, and `fail` keys provided by Beanbag. You can return these
+Barnum checks for a few different status keys besides the generic
+`:ok`, `:skip`, and `:fail` keys provided by Beanbag. You can return these
 status keys by passing them in as the optional first argument to `ok`, 
 `skip`, or `fail`.
 
