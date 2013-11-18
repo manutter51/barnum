@@ -268,8 +268,7 @@ keys, in order"
    (add-handler :e1 :h1 appends-A-and-continues)
    (add-handler :e1 :h2 appends-B-and-continues)
    (add-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 :data "")
-         block @handler-result]
+   (let [handler-result (fire :e1 :data "")]
      @*some-state*
      => "ABC"))
 
@@ -278,8 +277,7 @@ keys, in order"
    (add-handler :e1 :h1 appends-A-and-continues)
    (add-handler :e1 :h2 appends-D-and-stops)
    (add-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 :data "")
-         block @handler-result]
+   (let [handler-result (fire :e1 :data "")]
      @*some-state*
      => "AD"))
 
@@ -288,8 +286,7 @@ keys, in order"
    (add-handler :e1 :h1 appends-A-and-continues)
    (add-handler :e1 :h2 always-aborts)
    (add-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 :data "")
-         block @handler-result]
+   (let [handler-result (fire :e1 :data "")]
      @*some-state*
      => "A"))
   
@@ -298,8 +295,7 @@ keys, in order"
    (add-handler :e1 :h1 appends-A-and-continues)
    (add-handler :e1 :h2 always-skips)
    (add-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 :data "")
-         block @handler-result]
+   (let [handler-result (fire :e1 :data "")]
      @*some-state*
      => "AC"))
   
@@ -308,8 +304,7 @@ keys, in order"
    (add-handler :e1 :h1 appends-A-and-continues)
    (add-handler :e1 :h2 always-fails)
    (add-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 :data "")
-         block @handler-result]
+   (let [handler-result (fire :e1 :data "")]
      @*some-state*
      => "AC"))
   )
