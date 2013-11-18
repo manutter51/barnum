@@ -91,10 +91,9 @@ that have errors."
   "Attempts to fire the given event using the given args (specified as
 key-value pairs), after first supplying any default values and then
 validating the args with the validation function supplied when the event
-was added (if any).  Returns a future which can be dereferenced if
-you need to get back a result, or simply ignored if you just want to fire
-off an event asynchronously. Throws an Exception if the event has not been
-defined with add-event."
+was added (if any).  Returns a list of the handler results, in inverse
+order (last handler result is first in the list, and so on). Throws an
+Exception if the event has not been defined with add-event."
   [event-key & args]
   (when-not (even? (count args))
     (throw (Exception. "All args after the event key must be specified as zero or more key-value pairs.")))

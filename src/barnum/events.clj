@@ -272,8 +272,8 @@ called)."
 (defn fire
   "Triggers the event corresponding to the given key, which must be a
 single keyword. Any additional arguments will be passed to each of the
-registered handlers. Returns a future that derefs to the accumulated
-results of calling each of the handlers in turn."
+registered handlers. Returns the accumulated results of calling each
+of the handlers in turn."
   [event-key args]
   (let [event (or (event-key @registered-events)
                   (throw (Exception. (str "Event not defined: " event-key))))
@@ -289,10 +289,9 @@ results of calling each of the handlers in turn."
             args (assoc args
                    :_event event-key
                    :_fired-at (java.util.Date.))]
-        (future
-          (if ok?
+        (if ok?
             (run* handlers args)
-            (fail validation-errors)))))))
+            (fail validation-errors))))))
 
 (defn docs
   "Returns the doc string that was provided when the event was declared."  

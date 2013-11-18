@@ -320,18 +320,41 @@ keys, in order"
    (register-handler :e1 :h1 appends-A-and-continues)
    (register-handler :e1 :h2 appends-B-and-continues)
    (register-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 {:data ""})
-         block @handler-result]
+   (let [handler-result (fire :e1 {:data ""})]
      @*some-state*
      => "ABC"))
+
+  (fact
+   "Events can be triggered asynchronously using future"
+   (register-handler :e1 :h1 appends-A-and-continues)
+   (register-handler :e1 :h2 appends-B-and-continues)
+   (register-handler :e1 :h3 appends-C-and-continues)
+   (let [handler-result (future (fire :e1 {:data ""}))
+         blocked @handler-result]
+     @*some-state*
+     => "ABC"
+     
+     blocked
+     => (exactly '([:ok "ABC"]
+                     [:ok "AB"]
+                     [:ok "A"]))))
+  
+  (fact
+   "Handler results are returned in the inverse of the order they are defined."
+   (register-handler :e1 :h1 appends-A-and-continues)
+   (register-handler :e1 :h2 appends-B-and-continues)
+   (register-handler :e1 :h3 appends-C-and-continues)
+   (fire :e1 {:data ""})
+   => (exactly '([:ok "ABC"]
+                   [:ok "AB"]
+                     [:ok "A"])))
 
   (fact
    "A handler can return a stop value that will prevent subsequent handlers from firing."
    (register-handler :e1 :h1 appends-A-and-continues)
    (register-handler :e1 :h2 appends-D-and-stops)
    (register-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 {:data ""})
-         block @handler-result]
+   (let [handler-result (fire :e1 {:data ""})]
      @*some-state*
      => "AD"))
 
@@ -340,8 +363,7 @@ keys, in order"
    (register-handler :e1 :h1 appends-A-and-continues)
    (register-handler :e1 :h2 always-aborts)
    (register-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 {:data ""})
-         block @handler-result]
+   (let [handler-result (fire :e1 {:data ""})]
      @*some-state*
      => "A"))
   
@@ -350,8 +372,7 @@ keys, in order"
    (register-handler :e1 :h1 appends-A-and-continues)
    (register-handler :e1 :h2 always-skips)
    (register-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 {:data ""})
-         block @handler-result]
+   (let [handler-result (fire :e1 {:data ""})]
      @*some-state*
      => "AC"))
   
@@ -360,8 +381,7 @@ keys, in order"
    (register-handler :e1 :h1 appends-A-and-continues)
    (register-handler :e1 :h2 always-fails)
    (register-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 {:data ""})
-         block @handler-result]
+   (let [handler-result (fire :e1 {:data ""})]
      @*some-state*
      => "AC"))
   )

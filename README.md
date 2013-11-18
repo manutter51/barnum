@@ -214,9 +214,11 @@ followed by zero or more key/value pairs.
 
     (ev/fire :some-event :data-1 "Some data", :data-2 "More data")
 
-The `fire` function returns a future representing the collected results
-returned by the handlers for that event, in last-to-first order. To get
-the result of the last handler to fire, just call `first` on the seq.
+The `fire` function returns the collected results of all the handlers 
+for that event, in last-to-first order. To get the result of the last 
+handler to fire, just call `first` on the seq. By default, events are
+handled synchronously, but you can easily trigger asynchronous event
+handling by wrapping `fire` inside a `future`.
 
 ### Validating event parameters
 
