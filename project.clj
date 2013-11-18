@@ -1,4 +1,4 @@
-(defproject barnum "0.1.1-SNAPSHOT"
+(defproject barnum "0.1.1"
   :description "A simple event lib: define your own events, register
 handlers for them, and fire them."
   :url "http://github.com/manutter51/barnum"
