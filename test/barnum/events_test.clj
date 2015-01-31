@@ -90,6 +90,10 @@
       (register-event :e9 ["Event 9" :data '(:foo)])
       => (throws Exception "Event params must all be keywords"))
 
+(fact "Events can use namespaced keywords from namespaces that do not exist"
+      (keys (register-event :no.such.namespace/e10 ["Event 10" :data]))
+      => (contains [:no.such.namespace/e10]))
+
 ;; Adding handlers
 (with-state-changes [(before :facts
                              (do
