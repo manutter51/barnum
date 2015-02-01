@@ -1,5 +1,9 @@
 (ns barnum.api
-  (:require [barnum.events :as ev]))
+  (:require [barnum.events :as ev]
+            [barnum.results :as res]))
+
+;; Wrappers and docstrings for all the functions that should be used by
+;; apps/clients that require Barnum functions.
 
 (defn add-event
   "Define an event to be handled by the system. The event is named by
@@ -105,3 +109,39 @@ Exception if the event has not been defined with add-event."
 of params and defaults to be supplied when the event is fired."
   [event-key]
   (ev/docs event-key))
+
+(defn ok
+  "Returns a correctly-formatted tuple containing the handler status (ok)
+and the processed data. Used by event handlers to return results to the
+Barnum event engine. Data will be passed to the next handler for this
+event, if any, or returned to the function that fired the original event
+if there are no more handlers to call."
+  [data]
+  (res/ok data))
+
+(defn ok-go
+  "Returns a correctly-formatted tuple containing the handler status (ok),
+the event key for the next event to be fired, and the processed data. Used
+by event handlers to return results to the Barnum event engine and trigger
+a follow-up event without consuming stack space that might lead to a stack
+overflow. Any additional handlers for the current event will be skipped."
+  [next-event-key data]
+  (res/ok-go next-event-key data))
+
+(defn fail
+  "Returns a correctly-formatted tuple containing the handler status (fail)
+and the processed data. Used by event handlers to return results to the
+Barnum event engine. Any additional handlers for the current event will be
+skipped, and the data will be returned immediately to the function that
+fired the original event."
+  [data]
+  (res/fail data))
+
+(defn fail-go
+  "Returns a correctly-formatted tuple containing the handler status (ok),
+the event key for the next event to be fired, and the processed data. Used
+by event handlers to return results to the Barnum event engine and trigger
+a follow-up event without consuming stack space that might lead to a stack
+overflow. Any additional handlers for the current event will be skipped."
+  [error-event-key data]
+  (res/fail-go error-event-key data))

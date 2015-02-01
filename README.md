@@ -93,7 +93,7 @@ or you fire a new event, or you return to the function that fired the original e
 ## Usage
 
     (ns my.namespace
-      (:require [barnum.events :as ev]))
+      (:require [barnum.api :as ev]))
 
 The core functionality of Barnum can be broken down into five types of
 tasks.
@@ -220,7 +220,7 @@ or return it to the function that fired the original event, if there are no
 more handlers.
 
     (ns my.handler-ns
-      (:require [barnum.results :refer [ok ok-go fail fail-go]]))
+      (:require [barnum.api :refer [ok ok-go fail fail-go]]))
 
     (defn my-handler [args]
       (let [data (:data args)]
@@ -355,7 +355,7 @@ Barnum includes the following predefined validation functions, in the
 
 ## License
 
-Copyright © 2013 Mark Nutter
+Copyright © 2013-2015 Mark Nutter
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.
