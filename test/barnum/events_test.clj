@@ -8,90 +8,51 @@
 (fact "about declaring events"
       (build-event-def
        :empty-event
-       '())
+       [])
       => {:key :empty-event
           :docstring nil
-          :options {:defaults {}}
-          :params nil}
+          :options {:max-handlers 2147483647, :min-handlers 0}}
       
       (build-event-def
        :empty-event
-       '("a docstring"))
+       ["a docstring"])
       => {:key :empty-event
           :docstring "a docstring"
-          :options {:defaults {}}
-          :params nil}
+          :options {:max-handlers 2147483647, :min-handlers 0}}
       
       (build-event-def
        :event-opt
-       '({:min-handlers 1}))
+       [:min-handlers 1])
       => {:key :event-opt
           :docstring nil
-          :options {:defaults {}, :min-handlers 1}
-          :params nil}
+          :options {:max-handlers 2147483647, :min-handlers 1}}
       
-      (build-event-def
-       :event-params
-       '(:time :flux :foo))
-      => {:key :event-params
-          :docstring nil
-          :options {:defaults {:flux nil, :foo nil, :time nil}}
-          :params [:time :flux :foo]}
 
       (build-event-def
        :event-doc-opt
-       '("a docstring"
-         {:min-handlers 1}))
+       '["a docstring" :min-handlers 1])
       => {:key :event-doc-opt
           :docstring "a docstring"
-          :options {:defaults {},  :min-handlers 1}
-          :params nil}
-      
-      (build-event-def
-       :event-all
-       '("a docstring"
-         {:min-handlers 1}
-         :time :flux :foo))
-      => {:key :event-all
-          :docstring "a docstring"
-          :options {:defaults {:flux nil, :foo nil, :time nil},
-                    :min-handlers 1}
-          :params [:time :flux :foo]})
+          :options {:max-handlers 2147483647, :min-handlers 1}})
 
 (fact "Event key must be a keyword"
-      (register-event "e1" ["Event 1" :data])
+      (register-event "e1" ["Event 1"])
       => (throws Exception "Event key must be a keyword")
       
-      (register-event 'e1 ["Event 1" :data])
+      (register-event 'e1 ["Event 1"])
       => (throws Exception "Event key must be a keyword")
       
-      (register-event #{:e1} ["Event 1" :data])
+      (register-event #{:e1} ["Event 1"])
       => (throws Exception "Event key must be a keyword")
       
-      (register-event [:e1] ["Event 1" :data])
+      (register-event [:e1] ["Event 1"])
       => (throws Exception "Event key must be a keyword")
       
-      (register-event '(:e1) ["Event 1" :data])
+      (register-event '(:e1) ["Event 1"])
       => (throws Exception "Event key must be a keyword"))
 
-(fact "Event params must be keywords"
-      (register-event :e9 ["Event 9" :data "foo"])
-      => (throws Exception "Event params must all be keywords")
-      
-      (register-event :e9 ["Event 9" :data 'foo])
-      => (throws Exception "Event params must all be keywords")
-      
-      (register-event :e9 ["Event 9" :data #{:foo}])
-      => (throws Exception "Event params must all be keywords")
-      
-      (register-event :e9 ["Event 9" :data [:foo]])
-      => (throws Exception "Event params must all be keywords")
-      
-      (register-event :e9 ["Event 9" :data '(:foo)])
-      => (throws Exception "Event params must all be keywords"))
-
 (fact "Events can use namespaced keywords from namespaces that do not exist"
-      (keys (register-event :no.such.namespace/e10 ["Event 10" :data]))
+      (keys (register-event :no.such.namespace/e10 ["Event 10"]))
       => (contains [:no.such.namespace/e10]))
 
 ;; Adding handlers
@@ -99,14 +60,14 @@
                              (do
                                (dosync (ref-set registered-handlers {}))
                                (reset! registered-events {})
-                               (register-event :e1 ["Event 1" :data])
-                               (register-event :e2 ["Event 2" :data])
-                               (register-event :e3 ["Event 3" :data])
-                               (register-event :e4 ["Event 4" :data])
-                               (register-event :e5 ["Event 5" :data])))]
+                               (register-event :e1 ["Event 1"])
+                               (register-event :e2 ["Event 2"])
+                               (register-event :e3 ["Event 3"])
+                               (register-event :e4 ["Event 4"])
+                               (register-event :e5 ["Event 5"])))]
   
   (fact "You can't add the same event twice"
-        (register-event :e1 ["Event 1" :data])
+        (register-event :e1 ["Event 1"])
         => (throws Exception "Duplicate event definition: :e1 Event 1"))
   
   (fact "You can add a handler to an event"
@@ -158,7 +119,7 @@
                              (do
                               (dosync (ref-set registered-handlers {}))
                               (reset! registered-events {})
-                              (register-event :e1 ["Event 1" :data])
+                              (register-event :e1 ["Event 1"])
                               (register-handler :e1 :h1 identity)
                               (register-handler :e1 :h2 identity)
                               (register-handler :e1 :h3 identity)
@@ -196,9 +157,9 @@ keys, in order"
                              (do
                                (dosync (ref-set registered-handlers {}))
                                (reset! registered-events {})
-                               (register-event :e1 ["Event 1" :data])
-                               (register-event :e2 ["Event 2" :data])
-                               (register-event :e3 ["Event 3" :data])
+                               (register-event :e1 ["Event 1"])
+                               (register-event :e2 ["Event 2"])
+                               (register-event :e3 ["Event 3"])
                                (register-handler #{:e1 :e2 :e3} :h1 identity)
                                (register-handler #{:e1 :e3} :h2 identity)
                                (register-handler :e2 :h3 identity)
@@ -264,12 +225,9 @@ keys, in order"
                              (do
                                (dosync (ref-set registered-handlers {}))
                                (reset! registered-events {})
-                               (register-event :e1 ["Event 1"
-                                                    {:max-handlers 2}
-                                                    :data])
-                               (register-event :e2 ["Event 2" :data])
-                               (register-event :e3 ["Event 2"
-                                                    {:min-handlers 1} :data])
+                               (register-event :e1 ["Event 1" :max-handlers 2])
+                               (register-event :e2 ["Event 2"])
+                               (register-event :e3 ["Event 2" :min-handlers 1])
                                (register-handler #{:e1 :e2} :h1 identity)
                                (register-handler :e1 :h2 identity)
                                (register-handler :e1 :h3 identity)
@@ -317,7 +275,7 @@ keys, in order"
                                 (ref-set registered-handlers {}))
                                (reset! registered-events {})
                                (reset! *some-state* "")
-                               (register-event :e1 [ "Event 1" :data])))]
+                               (register-event :e1 [ "Event 1"])))]
   
   (fact
    "Handlers fire in the order they are defined."

@@ -134,7 +134,7 @@ The options argument is a map with the following keys:
 In an architecture where you call one or more plugins to set up your event
 handlers, you can call `(ev/check)` after setup to compare the number
 of handlers assigned to each event against the `:min-handlers` (default
-zero) and `:max-handlers` (default MAXINT) for that event.
+zero) and `:max-handlers` (default Integer/MAX_VALUE) for that event.
 
 *Note:* Each event can be defined only once. Attempting to add the same
 event key more than once will throw an exception.

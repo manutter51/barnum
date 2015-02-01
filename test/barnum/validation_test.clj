@@ -2,13 +2,14 @@
   (:require [midje.sweet :refer :all]
             [barnum.api :refer :all]
             [barnum.events :refer [registered-events registered-handlers]]
-            [barnum.events.validation :refer :all]
-            [beanbag.core :refer [ok fail skip]]))
+            [barnum.events.validation :refer :all]))
 
 (defn do-nothing-handler [args]
   (ok))
 
-(with-state-changes [(before :facts
+;; TODO Refactor this to use separate fn for setting validation fn
+
+#_(with-state-changes [(before :facts
                              (do
                                (dosync (ref-set registered-handlers {}))
                                (reset! registered-events {})))]

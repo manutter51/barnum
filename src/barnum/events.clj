@@ -2,13 +2,11 @@
   (:require [clojure.set :as set]
             [beanbag.core :refer [ok skip fail beanbag? cond-result]]))
 
-;; TODO: write built-in validation functions
-
 (def registered-events (atom {}))
 (def registered-handlers (ref {}))
-(def tmp-handlers (atom {}))
+#_(def tmp-handlers (atom {}))
 
-(defn- ev-get-docstring [params]
+(defn- get-docstring [params]
   (let [docstring (first params)
         docstring (if (string? docstring) docstring)
         params (if docstring
@@ -16,67 +14,56 @@
                  params)]
     [docstring params]))
 
-(defn- get-defaults
-  [params user-defaults]
-  (let [auto-defaults (into {}
-                            (for [param params] [param nil]))]
-    (merge auto-defaults user-defaults)))
+(defn- parse-options* [& [k v & more]]
+  (if (nil? k)
+    {}
+    (if (seq more)
+      (assoc (apply parse-options* more) k v)
+      {k v})))
 
-;; Possible options are:
+;; Get event options. Possible options are:
 ;;  * min-handlers -- minimum number of handlers required
 ;;  * max-handlers -- maximum number of handlers allowed
-;;  * validation-fn -- function to validate args when fired
-;;  * defaults -- map of defaults for each param if not nil
 
-(defn- ev-get-opts [params]
-  (let [opts (first params)
-        opts (if (map? opts) opts)
-        params (if opts
-                 (next params)
-                 params)
-        params (if (seq params)
-                 (vec params))]
-    [(or opts {}) params]))
-
-(defn- build-defaults [opts params]
-  (assoc opts :defaults
-         (get-defaults params (or (:defaults opts) {}))))
-
-(defn- ev-get-params [params]
-  (if (and (vector? (first params))
-           (nil? (rest params)))
-    (first params)
-    params))
+(defn- parse-options [args]
+  (let [opt (apply parse-options* args)
+        valid-keys #{:min-handlers :max-handlers}
+        min-handlers (:min-handlers opt 0)
+        max-handlers (:max-handlers opt Integer/MAX_VALUE)]
+    (if-let [wrong (seq (filter (complement valid-keys) (keys opt)))]
+      (throw (Exception. (str "Not a valid event option: " (pr-str wrong)))))
+    (if-not (number? min-handlers)
+      (throw (Exception. "Invalid value for :min-handlers")))
+    (if-not (number? max-handlers)
+      (throw (Exception. "Invalid value for :max-handlers")))
+    (if-not (<= min-handlers max-handlers)
+      (throw (Exception. ":min-handlers must be less than or equal to :max-handlers")))
+    {:min-handlers min-handlers
+     :max-handlers max-handlers}))
 
 (defn build-event-def
   "Builds the structure used internally for event management."
-  [event-key event-params]
-  (let [[docstring event-params] (ev-get-docstring event-params)
-        [opts event-params] (ev-get-opts event-params)]
-    (if-not (every? keyword? event-params)
-      (throw (Exception. "Event params must all be keywords")))
+  [event-key more]
+  (let [[docstring more] (get-docstring more)
+        opts (parse-options more)]
     {:key event-key
      :docstring docstring
-     :options (build-defaults opts event-params)
-     :params event-params}))
+     :options opts}))
 
 (defn register-event
   "Adds an event structure to the registered-events list"
   [event-key params]
   ;; takes the event name plus a vector with the following items, in order:
   ;;    string [optional] -- event docstring
-  ;;    map [optional] -- event options
-  ;;    & keywords -- used to build the map that will be passed to
-  ;;    event handlers.
+  ;;    event options -- :min-handlers or max-handlers, followed by a number
   (if-not (keyword? event-key)
     (throw (Exception. "Event key must be a keyword")))
-  (let [event-struct (build-event-def event-key params)
-        key (:key event-struct)]
-    (if-let [existing (key @registered-events)]
+  (let [event-struct (build-event-def event-key params)]
+    (if-let [existing (event-key @registered-events)]
       (throw (Exception. (str
-                          "Duplicate event definition: " key " "
+                          "Duplicate event definition: " event-key " "
                           (:docstring existing)))))
-    (swap! registered-events assoc key event-struct)))
+    (swap! registered-events assoc event-key event-struct)))
 
 (declare register-handlers)
 (defn register-handler

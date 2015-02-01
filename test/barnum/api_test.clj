@@ -1,56 +1,78 @@
 (ns barnum.api-test
   (:require [midje.sweet :refer :all]
             [barnum.api :refer :all]
-            [barnum.events :refer [registered-events registered-handlers]]
-            [beanbag.core :refer [ok fail skip]]))
+            [barnum.events :refer [registered-events registered-handlers]]))
 
 (def ^{:dynamic true} *some-state* (atom nil))
 
 (fact "Event key must be a keyword"
-      (add-event "e1" "Event 1" :data)
+      (add-event "e1" "Event 1")
       => (throws Exception "Event key must be a keyword")
       
-      (add-event 'e1 "Event 1" :data)
+      (add-event 'e1 "Event 1")
       => (throws Exception "Event key must be a keyword")
       
-      (add-event #{:e1} "Event 1" :data)
+      (add-event #{:e1} "Event 1")
       => (throws Exception "Event key must be a keyword")
       
-      (add-event [:e1] "Event 1" :data)
+      (add-event [:e1] "Event 1")
       => (throws Exception "Event key must be a keyword")
       
-      (add-event '(:e1) "Event 1" :data)
+      (add-event '(:e1) "Event 1")
       => (throws Exception "Event key must be a keyword"))
 
-(fact "Event params must be keywords"
-      (add-event :e9 "Event 9" :data "foo")
-      => (throws Exception "Event params must all be keywords")
-      
-      (add-event :e9 "Event 9" :data 'foo)
-      => (throws Exception "Event params must all be keywords")
-      
-      (add-event :e9 "Event 9" :data #{:foo})
-      => (throws Exception "Event params must all be keywords")
-      
-      (add-event :e9 "Event 9" :data [:foo])
-      => (throws Exception "Event params must all be keywords")
-      
-      (add-event :e9 "Event 9" :data '(:foo))
-      => (throws Exception "Event params must all be keywords"))
+(fact "Event options must be either :min-handlers or max-handlers, followed by a number"
+      (add-event :e1 :a-bad-param 0)
+      => (throws Exception "Not a valid event option: (:a-bad-param)")
+
+      (add-event :e1 :min-handlers)
+      => (throws Exception "Invalid value for :min-handlers")
+
+      (add-event :e1 :max-handlers)
+      => (throws Exception "Invalid value for :max-handlers")
+
+      (add-event :e1 :min-handlers :max-handlers)
+      => (throws Exception "Invalid value for :min-handlers")
+
+      (add-event :e1 :min-handlers "One")
+      => (throws Exception "Invalid value for :min-handlers")
+
+      (add-event :e1 :min-handlers [1])
+      => (throws Exception "Invalid value for :min-handlers")
+
+      (add-event :e1 :min-handlers #{1})
+      => (throws Exception "Invalid value for :min-handlers")
+
+      (add-event :e1 :min-handlers 3 :max-handlers 1)
+      => (throws Exception ":min-handlers must be less than or equal to :max-handlers")
+
+      (add-event :m1 :min-handlers 1)
+      (add-event :m2 :max-handlers 1)
+      (add-event :m3 :min-handlers 1 :max-handlers 1)
+
+      (get-in @registered-events [:m1 :options])
+      => (just {:min-handlers 1 :max-handlers Integer/MAX_VALUE})
+
+      (get-in @registered-events [:m2 :options])
+      => (just {:min-handlers 0  :max-handlers 1})
+
+      (get-in @registered-events [:m3 :options])
+      => (just {:min-handlers 1 :max-handlers 1}))
 
 ;; Adding handlers
-(with-state-changes [(before :facts
-                             (do
-                               (dosync (ref-set registered-handlers {}))
-                               (reset! registered-events {})
-                               (add-event :e1 "Event 1" :data)
-                               (add-event :e2 "Event 2" :data)
-                               (add-event :e3 "Event 3" :data)
-                               (add-event :e4 "Event 4" :data)
-                               (add-event :e5 "Event 5" :data)))]
+(with-state-changes
+  [(before :facts
+           (do
+             (dosync (ref-set registered-handlers {}))
+             (reset! registered-events {})
+             (add-event :e1 "Event 1")
+             (add-event :e2 "Event 2")
+             (add-event :e3 "Event 3")
+             (add-event :e4 "Event 4")
+             (add-event :e5 "Event 5")))]
   
   (fact "You can't add the same event twice"
-        (add-event :e1 "Event 1" :data)
+        (add-event :e1 "Event 1")
         => (throws Exception "Duplicate event definition: :e1 Event 1"))
   
   (fact "You can add a handler to an event"
@@ -66,7 +88,7 @@
         => (throws Exception
                    "Cannot register handler :h1 for unknown event :no-such-event"))
 
-  (fact "You cannot add the same handler twice"
+  (fact "You cannot add the same handler twice to the same event"
         (add-handler :e1 :h1 identity)
         (add-handler :e1 :h1 identity)
         => (throws Exception "Duplicate event handler :h1 for event :e1"))
@@ -98,16 +120,17 @@
 )
 
 ;; Managing handlers
-(with-state-changes [(before :facts
-                             (do
-                              (dosync (ref-set registered-handlers {}))
-                              (reset! registered-events {})
-                              (add-event :e1 "Event 1" :data)
-                              (add-handler :e1 :h1 identity)
-                              (add-handler :e1 :h2 identity)
-                              (add-handler :e1 :h3 identity)
-                              (add-handler :e1 :h4 identity)
-                              (add-handler :e1 :h5 identity)))]
+(with-state-changes
+  [(before :facts
+           (do
+             (dosync (ref-set registered-handlers {}))
+             (reset! registered-events {})
+             (add-event :e1 "Event 1")
+             (add-handler :e1 :h1 identity)
+             (add-handler :e1 :h2 identity)
+             (add-handler :e1 :h3 identity)
+             (add-handler :e1 :h4 identity)
+             (add-handler :e1 :h5 identity)))]
   
   (fact "The handler-keys function returns the current list of handler
 keys, in order"
@@ -136,18 +159,19 @@ keys, in order"
 )
 
 ;; Removing/replacing handlers
-(with-state-changes [(before :facts
-                             (do
-                               (dosync (ref-set registered-handlers {}))
-                               (reset! registered-events {})
-                               (add-event :e1 "Event 1" :data)
-                               (add-event :e2 "Event 2" :data)
-                               (add-event :e3 "Event 3" :data)
-                               (add-handler #{:e1 :e2 :e3} :h1 identity)
-                               (add-handler #{:e1 :e3} :h2 identity)
-                               (add-handler :e2 :h3 identity)
-                               (add-handler :e2 :h4 identity)
-                               (add-handler :e3 :h5 identity)))]
+(with-state-changes
+  [(before :facts
+           (do
+             (dosync (ref-set registered-handlers {}))
+             (reset! registered-events {})
+             (add-event :e1 "Event 1")
+             (add-event :e2 "Event 2")
+             (add-event :e3 "Event 3")
+             (add-handler #{:e1 :e2 :e3} :h1 identity)
+             (add-handler #{:e1 :e3} :h2 identity)
+             (add-handler :e2 :h3 identity)
+             (add-handler :e2 :h4 identity)
+             (add-handler :e3 :h5 identity)))]
   
   (fact "You can remove one handler from one event without affecting other handlers or events"
         (remove-handler :e1 :h1)
@@ -204,20 +228,20 @@ keys, in order"
 )
 
 ;; event handler check function
-(with-state-changes [(before :facts
-                             (do
-                               (dosync (ref-set registered-handlers {}))
-                               (reset! registered-events {})
-                               (add-event :e1 "Event 1"
-                                          {:max-handlers 2}
-                                          :data)
-                               (add-event :e2 "Event 2" :data)
-                               (add-event :e3 "Event 2"
-                                          {:min-handlers 1} :data)
-                               (add-handler #{:e1 :e2} :h1 identity)
-                               (add-handler :e1 :h2 identity)
-                               (add-handler :e1 :h3 identity)
-                               (add-handler :e2 :h4 identity)))]
+(with-state-changes
+  [(before :facts
+           (do
+             (dosync (ref-set registered-handlers {}))
+             (reset! registered-events {})
+             (add-event :e1 "Event 1"
+                        :max-handlers 2)
+             (add-event :e2 "Event 2")
+             (add-event :e3 "Event 2"
+                        :min-handlers 1)
+             (add-handler #{:e1 :e2} :h1 identity)
+             (add-handler :e1 :h2 identity)
+             (add-handler :e1 :h3 identity)
+             (add-handler :e2 :h4 identity)))]
 
   (fact "The check function returns correct messages for events with too many or too few handlers"
         (let [errors (check)]
@@ -243,17 +267,11 @@ keys, in order"
 (defn appends-C-and-continues [args]
   (ok (swap! *some-state* str "C")))
 
-(defn appends-D-and-stops [args]
+#_(defn appends-D-and-stops [args]
   (ok :ok-stop (swap! *some-state* str "D")))
 
 (defn always-fails [args]
   (fail "This handler always fails"))
-
-(defn always-aborts [args]
-  (fail :abort "This handler always aborts"))
-
-(defn always-skips [args]
-  (skip "This handler always skips"))
 
 (with-state-changes [(before :facts
                              (do
@@ -261,7 +279,7 @@ keys, in order"
                                 (ref-set registered-handlers {}))
                                (reset! registered-events {})
                                (reset! *some-state* "")
-                               (add-event :e1 "Event 1" :data)))]
+                               (add-event :e1 "Event 1")))]
   
   (fact
    "Handlers fire in the order they are defined."
@@ -272,7 +290,7 @@ keys, in order"
      @*some-state*
      => "ABC"))
 
-  (fact
+  #_(fact
    "A handler can return a stop value that will prevent subsequent handlers from firing."
    (add-handler :e1 :h1 appends-A-and-continues)
    (add-handler :e1 :h2 appends-D-and-stops)
@@ -281,7 +299,7 @@ keys, in order"
      @*some-state*
      => "AD"))
 
-  (fact
+  #_(fact
    "A handler can return an abort result that will prevent subsequent handlers from firing."
    (add-handler :e1 :h1 appends-A-and-continues)
    (add-handler :e1 :h2 always-aborts)
@@ -290,7 +308,7 @@ keys, in order"
      @*some-state*
      => "A"))
   
-  (fact
+  #_(fact
    "A handler can return a skip result that will NOT prevent subsequent handlers from firing."
    (add-handler :e1 :h1 appends-A-and-continues)
    (add-handler :e1 :h2 always-skips)
@@ -299,7 +317,7 @@ keys, in order"
      @*some-state*
      => "AC"))
   
-  (fact
+  #_(fact
    "A handler can return a fail result that will NOT prevent subsequent handlers from firing."
    (add-handler :e1 :h1 appends-A-and-continues)
    (add-handler :e1 :h2 always-fails)
@@ -309,3 +327,11 @@ keys, in order"
      => "AC"))
   )
 
+(defn adds-1-and-fires-e2 [args]
+  (ok-go :e2 (swap! *some-state* inc)))
+
+(defn multiplies-by-to2-and-fires-e3 [args]
+  (ok-go :e3 (swap! *some-state* * 2)))
+
+(defn subtracts-1-and-fires-e4 [args]
+  (ok-go :e4 (swap! *some-state* dec)))
