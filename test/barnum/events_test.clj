@@ -1,31 +1,29 @@
 (ns barnum.events-test
   (:require [midje.sweet :refer :all]
             [barnum.events :refer :all]
-            [beanbag.core :refer [ok fail skip]]))
+            [barnum.results :refer [ok ok-go fail fail-go]]))
 
-(def ^{:dynamic true} *some-state* (atom nil))
-
-(fact "about declaring events"
+(fact "build-event-def returns appropriate event structures"
       (build-event-def
        :empty-event
        [])
       => {:key :empty-event
           :docstring nil
-          :options {:max-handlers 2147483647, :min-handlers 0}}
+          :options {:max-handlers Integer/MAX_VALUE, :min-handlers 0}}
       
       (build-event-def
        :empty-event
        ["a docstring"])
       => {:key :empty-event
           :docstring "a docstring"
-          :options {:max-handlers 2147483647, :min-handlers 0}}
+          :options {:max-handlers Integer/MAX_VALUE, :min-handlers 0}}
       
       (build-event-def
        :event-opt
        [:min-handlers 1])
       => {:key :event-opt
           :docstring nil
-          :options {:max-handlers 2147483647, :min-handlers 1}}
+          :options {:max-handlers Integer/MAX_VALUE, :min-handlers 1}}
       
 
       (build-event-def
@@ -33,7 +31,7 @@
        '["a docstring" :min-handlers 1])
       => {:key :event-doc-opt
           :docstring "a docstring"
-          :options {:max-handlers 2147483647, :min-handlers 1}})
+          :options {:max-handlers Integer/MAX_VALUE, :min-handlers 1}})
 
 (fact "Event key must be a keyword"
       (register-event "e1" ["Event 1"])
@@ -55,6 +53,48 @@
       (keys (register-event :no.such.namespace/e10 ["Event 10"]))
       => (contains [:no.such.namespace/e10]))
 
+;; Setting validation functions
+
+(with-state-changes [(before :facts
+                             (do
+                               (dosync (ref-set registered-handlers {}))
+                               (reset! registered-events {})
+                               (register-event :e1 ["Event 1"])))]
+
+    (fact "The event must be referenced by an event key"
+          (set-validation-fn! {:e1 {:validation-fn nil }} identity)
+          => (throws Exception "Cannot set validation function: {:e1 {:validation-fn nil}} is not a keyword"))
+
+    (fact "You can set the validation function on an event"
+          (set-validation-fn! :e1 identity)
+
+          @registered-events
+          => {:e1 {:key :e1
+                   :docstring "Event 1"
+                   :options {:min-handlers 0 :max-handlers Integer/MAX_VALUE}
+                   :validation-fn identity}})
+
+    (fact "You can reset the validation function to nil"
+          (set-validation-fn! :e1 identity)
+          (set-validation-fn! :e1 nil)
+
+          @registered-events
+          => {:e1 {:key :e1
+                   :docstring "Event 1"
+                   :options {:min-handlers 0 :max-handlers Integer/MAX_VALUE}
+                   :validation-fn nil}})
+
+    (fact "If you have no validation fn, execution will proceed as though validation had succeeded."
+          (validate-args :e1 {:key "value"})
+          => {:key "value"})
+
+    (fact "If you set a new validation fn, it will replace the old one"
+          (set-validation-fn! :e1 (fn [& more] (throw (Exception. "Old"))))
+          (set-validation-fn! :e1 (fn [& more] (throw (Exception. "New"))))
+
+          (validate-args :e1 {:key "value"})
+          => (throws Exception "New")))
+
 ;; Adding handlers
 (with-state-changes [(before :facts
                              (do
@@ -65,7 +105,7 @@
                                (register-event :e3 ["Event 3"])
                                (register-event :e4 ["Event 4"])
                                (register-event :e5 ["Event 5"])))]
-  
+
   (fact "You can't add the same event twice"
         (register-event :e1 ["Event 1"])
         => (throws Exception "Duplicate event definition: :e1 Event 1"))
@@ -83,7 +123,7 @@
         => (throws Exception
                    "Cannot register handler :h1 for unknown event :no-such-event"))
 
-  (fact "You cannot add the same handler twice"
+  (fact "You cannot add the same handler to the same event twice"
         (register-handler :e1 :h1 identity)
         (register-handler :e1 :h1 identity)
         => (throws Exception "Duplicate event handler :h1 for event :e1"))
@@ -248,103 +288,63 @@ keys, in order"
 ;; firing event handlers
 ;;   -- generic handlers
 
-(defn appends-A-and-continues [args]
-  (ok (swap! *some-state* str "A")))
+(defn sets-A-and-continues [data]
+  (ok (assoc data :a "A")))
 
-(defn appends-B-and-continues [args]
-  (ok (swap! *some-state* str "B")))
+(defn sets-B-and-jumps [data]
+  (ok-go :e2 (assoc data :b "B")))
 
-(defn appends-C-and-continues [args]
-  (ok (swap! *some-state* str "C")))
+(defn sets-C-and-continues [data]
+  (ok (assoc data :c "C")))
 
-(defn appends-D-and-stops [args]
-  (ok :ok-stop (swap! *some-state* str "D")))
+(defn sets-D-and-continues [data]
+  (ok (assoc data :d "D")))
 
-(defn always-fails [args]
-  (fail "This handler always fails"))
+(defn fails-and-sets-e1 [data]
+  (fail "Error 1 happened" (assoc data :e1 "Error 1")))
 
-(defn always-aborts [args]
-  (fail :abort "This handler always aborts"))
+(defn aborts-and-sets-e2 [data]
+  (fail-go :on-error-2 "Error 2 happened" (assoc data :e2 "Error 2")))
 
-(defn always-skips [args]
-  (skip "This handler always skips"))
+(def initial-data {:key "value"})
 
-(with-state-changes [(before :facts
-                             (do
-                               (dosync
-                                (ref-set registered-handlers {}))
-                               (reset! registered-events {})
-                               (reset! *some-state* "")
-                               (register-event :e1 [ "Event 1"])))]
-  
-  (fact
-   "Handlers fire in the order they are defined."
-   (register-handler :e1 :h1 appends-A-and-continues)
-   (register-handler :e1 :h2 appends-B-and-continues)
-   (register-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 {:data ""})]
-     @*some-state*
-     => "ABC"))
+(with-state-changes
+  [(before :facts
+           (do
+             (dosync
+               (ref-set registered-handlers {}))
+             (reset! registered-events {})
+             (reset! *some-state* "")
+             (register-event :e1 ["Event 1"])
+             (register-event :e2 ["Event 2"])
+             (register-event :on-error-2 ["Error handler 2"])))]
 
   (fact
-   "Events can be triggered asynchronously using future"
-   (register-handler :e1 :h1 appends-A-and-continues)
-   (register-handler :e1 :h2 appends-B-and-continues)
-   (register-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (future (fire :e1 {:data ""}))
-         blocked @handler-result]
-     @*some-state*
-     => "ABC"
-     
-     blocked
-     => (exactly '([:ok "ABC"]
-                     [:ok "AB"]
-                     [:ok "A"]))))
-  
-  (fact
-   "Handler results are returned in the inverse of the order they are defined."
-   (register-handler :e1 :h1 appends-A-and-continues)
-   (register-handler :e1 :h2 appends-B-and-continues)
-   (register-handler :e1 :h3 appends-C-and-continues)
-   (fire :e1 {:data ""})
-   => (exactly '([:ok "ABC"]
-                   [:ok "AB"]
-                     [:ok "A"])))
+    "Handlers fire in the order they are defined."
+    (register-handler :e1 :h1 sets-A-and-continues)
+    (register-handler :e1 :h2 sets-C-and-continues)
+    (register-handler :e1 :h3 sets-D-and-continues)
+
+    (fire :e1 initial-data)
+    => {:key "value" :a "A" :c "C" :d "D" :barnum.events/log [[:e1 :h1] [:e1 :h2] [:e1 :h3]]})
 
   (fact
-   "A handler can return a stop value that will prevent subsequent handlers from firing."
-   (register-handler :e1 :h1 appends-A-and-continues)
-   (register-handler :e1 :h2 appends-D-and-stops)
-   (register-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 {:data ""})]
-     @*some-state*
-     => "AD"))
+    "When a handler returns ok-go, any remaining handlers are skipped, and the specified event fires"
+    (register-handler :e1 :h1 sets-A-and-continues)
+    (register-handler :e1 :h2 sets-B-and-jumps)
+    (register-handler :e1 :h3 sets-C-and-continues)
+    (register-handler :e2 :h1 sets-D-and-continues)
+
+    (fire :e1 initial-data)
+    => {:key "value" :a "A" :b "B" :d "D" :barnum.events/log [[:e1 :h1] [:e1 :h2] [:e2 :h1]]})
 
   (fact
-   "A handler can return an abort result that will prevent subsequent handlers from firing."
-   (register-handler :e1 :h1 appends-A-and-continues)
-   (register-handler :e1 :h2 always-aborts)
-   (register-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 {:data ""})]
-     @*some-state*
-     => "A"))
-  
-  (fact
-   "A handler can return a skip result that will NOT prevent subsequent handlers from firing."
-   (register-handler :e1 :h1 appends-A-and-continues)
-   (register-handler :e1 :h2 always-skips)
-   (register-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 {:data ""})]
-     @*some-state*
-     => "AC"))
-  
-  (fact
-   "A handler can return a fail result that will NOT prevent subsequent handlers from firing."
-   (register-handler :e1 :h1 appends-A-and-continues)
-   (register-handler :e1 :h2 always-fails)
-   (register-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 {:data ""})]
-     @*some-state*
-     => "AC"))
+    "When a handler returns fail, any remaining handlers are skipped"
+    (register-handler :e1 :h1 sets-A-and-continues)
+    (register-handler :e1 :h2 fails-and-sets-e1)
+    (register-handler :e1 :h3 sets-C-and-continues)
+
+    (fire :e1 initial-data)
+    => {:key "value" :a "A" :e1 "Error 1" :barnum.events/log [[:e1 :h1] [:e1 :h2]] :barnum.errors/errors [[:e1 :h2 "Error 1 happened"]]})
+
   )
-

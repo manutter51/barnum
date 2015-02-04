@@ -313,6 +313,8 @@ in order, for any given event.
 
 ### Triggering events
 
+/TODO:/ use core.async instead of futures?
+
 To trigger an event and execute its associated handlers, use the `fire`
 function. The `fire` function takes the event key as its first argument,
 followed by zero or more key/value pairs.
@@ -324,6 +326,14 @@ for that event, in last-to-first order. To get the result of the last
 handler to fire, just call `first` on the seq. By default, events are
 handled synchronously, but you can easily trigger asynchronous event
 handling by wrapping `fire` inside a `future`.
+
+NOTES: Don't like that last-to-first vector. The event engine should
+treat data like a pipeline or assembly line, where the same product
+gets passed from station to station, being modified as it goes, and
+then drops off at the end in a completed state.
+
+NOTES: The `fire` fn should pass Barnum metadata to the event handler
+as the last argument, so that the handler can grab the current event
 
 ### Validating event parameters
 

@@ -17,14 +17,14 @@
       => (throws Exception #"Expected event key for next event to fire; got class clojure.lang.PersistentHashMap"))
 
 (fact "about the base fail fn"
-      (res/fail dummy-data)
-      => (just [:fail dummy-data]))
+      (res/fail "Error" dummy-data)
+      => (just [:fail (assoc dummy-data :barnum.errors/errors ["Error"])]))
 
 (fact "about the base fail-go fn"
-      (res/fail-go :error-event dummy-data)
-      => (just [:fail (assoc dummy-data :barnum.results/error-event :error-event)])
+      (res/fail-go :error-event "Error" dummy-data)
+      => (just [:fail (assoc dummy-data :barnum.results/error-event :error-event :barnum.errors/errors ["Error"])])
 
-      (res/fail-go dummy-data :error-event)
+      (res/fail-go dummy-data "Error" :error-event)
       => (throws Exception #"Expected event key for error event to fire; got class clojure.lang.PersistentHashMap"))
 
 (fact "about the api ok fn"
@@ -39,12 +39,12 @@
       => (throws Exception #"Expected event key for next event to fire; got class clojure.lang.PersistentHashMap"))
 
 (fact "about the api fail fn"
-      (api/fail dummy-data)
-      => (just [:fail dummy-data]))
+      (api/fail "Error" dummy-data)
+      => (just [:fail (assoc dummy-data :barnum.errors/errors ["Error"])]))
 
 (fact "about the api fail-go fn"
-      (api/fail-go :error-event dummy-data)
-      => (just [:fail (assoc dummy-data :barnum.results/error-event :error-event)])
+      (api/fail-go :error-event "Error" dummy-data)
+      => (just [:fail (assoc dummy-data :barnum.results/error-event :error-event :barnum.errors/errors ["Error"])])
 
-      (api/fail-go dummy-data :error-event)
+      (api/fail-go dummy-data "Error" :error-event)
       => (throws Exception #"Expected event key for error event to fire; got class clojure.lang.PersistentHashMap"))

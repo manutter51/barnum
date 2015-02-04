@@ -69,20 +69,19 @@
 (defn register-handler
   [event-key handler-key handler-fn]
   (cond (set? event-key) (register-handlers event-key handler-key handler-fn)
-        (keyword? event-key)
-        (if (nil? (event-key @registered-events))
-          (throw (Exception. (str "Cannot register handler "
-                                  handler-key " for unknown event "
-                                  event-key)))
-          (dosync (let [handlers (or (event-key @registered-handlers) [])
-                        existing (filter #(= handler-key (first %)) handlers)
-                        handlers (conj handlers [handler-key handler-fn])]
-                    (if (empty? existing)
-                      (commute registered-handlers assoc event-key handlers )
-                      (throw (Exception. (str "Duplicate event handler "
-                                              handler-key " for event "
-                                              event-key)))))
-                  @registered-handlers))
+        (keyword? event-key) (if (nil? (event-key @registered-events))
+                               (throw (Exception. (str "Cannot register handler "
+                                  handler-key " for unknown event " event-key)))
+                               (dosync (let [handlers (or (event-key @registered-handlers) [])
+                                             existing (filter #(= handler-key (first %)) handlers)
+                                             handlers (conj handlers [handler-key handler-fn])]
+                                         (if (empty? existing)
+                                           (commute registered-handlers assoc event-key handlers )
+                                           (throw (Exception. (str "Duplicate event handler "
+                                                                   handler-key " for event "
+                                                                   event-key)))))
+                                       ;; return handlers, for debugging/repl
+                                       @registered-handlers))
         :else (throw (Exception.
                       "Event key must be a keyword or a set of keywords."))))
 
@@ -222,20 +221,31 @@ that have errors."
                 nil
                 [event-key errors]))))))
 
-(defn validate-params
+(defn set-validation-fn!
+  "Sets the validation fn for a specific event or set of events. Pass nil as the
+validator function to disable validation."
+  [event-key validator-fn]
+  (let [event-keys (if (set? event-key) event-key #{ event-key })]
+    (doseq [k event-keys]
+            (if-not (keyword? k) (throw (Exception. (str "Cannot set validation function: "
+                                                         (pr-str k) " is not a keyword"))))
+            (swap! registered-events assoc-in [k :validation-fn] validator-fn))))
+
+(defn validate-args
   "Check for a validation function and call it on the args, if present."
-  [event args]
-  (let [options (:options event)
-        validation-fn (:validation-fn options)
-        params (:params event)]
-    (when (fn? validation-fn)
-      (validation-fn params args))))
+  [event-key args]
+  (let [event (event-key @registered-events)
+        validation-fn (:validation-fn event)]
+    (if (fn? validation-fn)
+      (validation-fn args)
+      args)))
 
 (defn run*
-  "Call each handler in turn, accumulating the results of each handler
-called, and returning a seq of beanbag results, in reverse order of
-execution (i.e. the first item will be the result of the last handler
-called)."
+  "Call each handler in turn, passing the given args to the first handler, and
+passing each successive handler the results returned by the previous handler. If
+a handler returns anything other than an \"ok\" result, stop processing handlers,
+and either fire the next event (on ok-go or fail-go), or return the error result
+(on fail)."
   ([handlers args]
      (run* handlers args '()))
   ([handlers args results]
@@ -270,7 +280,7 @@ of the handlers in turn."
       (skip (str "No handlers for event " event-key))
       (let [defaults (or (:defaults (:options event)) {})
             args (merge defaults args)
-            validation-errors (validate-params event args)
+            validation-errors (validate-args event args)
             ok? (empty? validation-errors)
             args (when ok? )
             args (assoc args

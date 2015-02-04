@@ -9,11 +9,17 @@
     (throw (Exception. (str "Expected event key for next event to fire; got " (class next-event-key)))))
   (bb/ok (assoc data ::next-event next-event-key)))
 
-(defn fail [data]
-  (bb/fail data))
+;; TODO Need some way to instrument this with the event key and handler key where it takes place...
+(defn fail [error-message data]
+  (let [existing-errors (:barnum.errors/errors data [])
+        data (assoc data :barnum.errors/errors (conj existing-errors error-message))]
+    (bb/fail data)))
 
-(defn fail-go [error-event-key data]
+;; TODO update this to match fail fn
+(defn fail-go [error-event-key error-message data]
   (when-not (keyword? error-event-key)
     (throw (Exception. (str "Expected event key for error event to fire; got " (class error-event-key)))))
-  (bb/fail (assoc data ::error-event error-event-key)))
+  (let [existing-errors (:barnum.errors/errors data [])
+        data (assoc data :barnum.errors/errors (conj existing-errors error-message))]
+    (bb/fail (assoc data ::error-event error-event-key :barnum.errors/errors (conj existing-errors error-message)))))
 

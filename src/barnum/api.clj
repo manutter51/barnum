@@ -134,8 +134,8 @@ and the processed data. Used by event handlers to return results to the
 Barnum event engine. Any additional handlers for the current event will be
 skipped, and the data will be returned immediately to the function that
 fired the original event."
-  [data]
-  (res/fail data))
+  [error-message data]
+  (res/fail error-message data))
 
 (defn fail-go
   "Returns a correctly-formatted tuple containing the handler status (ok),
@@ -143,5 +143,5 @@ the event key for the next event to be fired, and the processed data. Used
 by event handlers to return results to the Barnum event engine and trigger
 a follow-up event without consuming stack space that might lead to a stack
 overflow. Any additional handlers for the current event will be skipped."
-  [error-event-key data]
-  (res/fail-go error-event-key data))
+  [error-event-key error-message data]
+  (res/fail-go error-event-key error-message data))
