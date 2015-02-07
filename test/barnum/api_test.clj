@@ -258,80 +258,62 @@ keys, in order"
 ;; firing event handlers
 ;;   -- generic handlers
 
-(defn appends-A-and-continues [args]
-  (ok (swap! *some-state* str "A")))
+(defn sets-A-and-continues [ctx data]
+  (ok (assoc data :a "A")))
 
-(defn appends-B-and-continues [args]
-  (ok (swap! *some-state* str "B")))
+(defn sets-B-and-jumps [ctx data]
+  (ok-go :e2 (assoc data :b "B")))
 
-(defn appends-C-and-continues [args]
-  (ok (swap! *some-state* str "C")))
+(defn sets-C-and-continues [ctx data]
+  (ok (assoc data :c "C")))
 
-#_(defn appends-D-and-stops [args]
-  (ok :ok-stop (swap! *some-state* str "D")))
+(defn sets-D-and-continues [ctx data]
+  (ok (assoc data :d "D")))
 
-(defn always-fails [args]
-  (fail "This handler always fails"))
+(defn fails-and-sets-e1 [ctx data]
+  (fail :error-1 "Error 1 happened" data))
 
-(with-state-changes [(before :facts
-                             (do
-                               (dosync
-                                (ref-set registered-handlers {}))
-                               (reset! registered-events {})
-                               (reset! *some-state* "")
-                               (add-event :e1 "Event 1")))]
-  
+(defn aborts-and-sets-e2 [ctx data]
+  (fail-go :on-error-2 :error-2 "Error 2 happened" data))
+
+(def initial-data {:key "value"})
+
+(with-state-changes
+  [(before :facts
+           (do
+             (dosync
+               (ref-set registered-handlers {}))
+             (reset! registered-events {})
+             (add-event :e1 "Event 1")
+             (add-event :e2 "Event 2")
+             (add-event :on-error-2 "Error event 2")))]
+
   (fact
-   "Handlers fire in the order they are defined."
-   (add-handler :e1 :h1 appends-A-and-continues)
-   (add-handler :e1 :h2 appends-B-and-continues)
-   (add-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 :data "")]
-     @*some-state*
-     => "ABC"))
+    "Handlers fire in the order they are defined."
+    (add-handler :e1 :h1 sets-A-and-continues)
+    (add-handler :e1 :h2 sets-C-and-continues)
+    (add-handler :e1 :h3 sets-D-and-continues)
 
-  #_(fact
-   "A handler can return a stop value that will prevent subsequent handlers from firing."
-   (add-handler :e1 :h1 appends-A-and-continues)
-   (add-handler :e1 :h2 appends-D-and-stops)
-   (add-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 :data "")]
-     @*some-state*
-     => "AD"))
+    (:data (fire :e1 {} initial-data))
+    => {:key "value" :a "A" :c "C" :d "D"})
 
-  #_(fact
-   "A handler can return an abort result that will prevent subsequent handlers from firing."
-   (add-handler :e1 :h1 appends-A-and-continues)
-   (add-handler :e1 :h2 always-aborts)
-   (add-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 :data "")]
-     @*some-state*
-     => "A"))
-  
-  #_(fact
-   "A handler can return a skip result that will NOT prevent subsequent handlers from firing."
-   (add-handler :e1 :h1 appends-A-and-continues)
-   (add-handler :e1 :h2 always-skips)
-   (add-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 :data "")]
-     @*some-state*
-     => "AC"))
-  
-  #_(fact
-   "A handler can return a fail result that will NOT prevent subsequent handlers from firing."
-   (add-handler :e1 :h1 appends-A-and-continues)
-   (add-handler :e1 :h2 always-fails)
-   (add-handler :e1 :h3 appends-C-and-continues)
-   (let [handler-result (fire :e1 :data "")]
-     @*some-state*
-     => "AC"))
+  (fact
+    "When a handler returns ok-go, any remaining handlers are skipped, and the specified event fires"
+    (add-handler :e1 :h1 sets-A-and-continues)
+    (add-handler :e1 :h2 sets-B-and-jumps)
+    (add-handler :e1 :h3 sets-C-and-continues)
+    (add-handler :e2 :h1 sets-D-and-continues)
+
+    (:data (fire :e1 {} initial-data))
+    => {:key "value" :a "A" :b "B" :d "D"})
+
+  (fact
+    "When a handler returns fail, any remaining handlers are skipped"
+    (add-handler :e1 :h1 sets-A-and-continues)
+    (add-handler :e1 :h2 fails-and-sets-e1)
+    (add-handler :e1 :h3 sets-C-and-continues)
+
+    (:data (fire :e1 {} initial-data))
+    => {:key "value" :a "A"})
+
   )
-
-(defn adds-1-and-fires-e2 [args]
-  (ok-go :e2 (swap! *some-state* inc)))
-
-(defn multiplies-by-to2-and-fires-e3 [args]
-  (ok-go :e3 (swap! *some-state* * 2)))
-
-(defn subtracts-1-and-fires-e4 [args]
-  (ok-go :e4 (swap! *some-state* dec)))

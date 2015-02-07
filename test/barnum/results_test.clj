@@ -11,7 +11,7 @@
 
 (fact "about the base ok-go fn"
       (res/ok-go :next-event dummy-data)
-      => (exactly {:status :ok, :next :next-event, :data dummy-data})
+      => (exactly  {:data dummy-data, :next :next-event, :status :ok-go})
 
       (res/ok-go dummy-data :next-event)
       => (throws Exception #"Expected event key for next event to fire; got class clojure.lang.PersistentHashMap"))
@@ -22,11 +22,11 @@
 
 (fact "about the base fail-go fn"
       (res/fail-go :error-event :an-error "Error" dummy-data)
-      => (exactly {:status :fail, :error-key :an-error, :next :error-event, :message "Error", :data dummy-data})
+      => (exactly {:data dummy-data, :error-key :an-error, :message "Error", :next :error-event, :status :fail-go})
 
       (res/fail-go dummy-data :an-error "Error" :error-event)
       => (throws Exception #"Expected event key for error event to fire; got class clojure.lang.PersistentHashMap"))
 
 (fact "about the base not-valid fn"
       (res/not-valid {:missing-key "Missing"} {:key "value"})
-      => (exactly {:status :not-valid, :errors {:missing-key "missing"}, :data {:key "value"}}))
+      => (exactly {:data dummy-data, :errors {:missing-key "Missing"}, :status :not-valid}))

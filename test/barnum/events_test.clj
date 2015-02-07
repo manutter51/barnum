@@ -85,7 +85,7 @@
                    :validation-fn nil}})
 
     (fact "If you have no validation fn, execution will proceed as though validation had succeeded."
-          (validate-args :e1 {} {:key "value"})
+          (:data (validate-args :e1 {} {:key "value"}))
           => {:key "value"})
 
     (fact "If you set a new validation fn, it will replace the old one"
@@ -314,7 +314,6 @@ keys, in order"
              (dosync
                (ref-set registered-handlers {}))
              (reset! registered-events {})
-             (reset! *some-state* "")
              (register-event :e1 ["Event 1"])
              (register-event :e2 ["Event 2"])
              (register-event :on-error-2 ["Error handler 2"])))]
@@ -325,8 +324,8 @@ keys, in order"
     (register-handler :e1 :h2 sets-C-and-continues)
     (register-handler :e1 :h3 sets-D-and-continues)
 
-    (fire :e1 {} initial-data)
-    => {:key "value" :a "A" :c "C" :d "D" :barnum.events/log [[:e1 :h1] [:e1 :h2] [:e1 :h3]]})
+    (:data (fire :e1 {} initial-data))
+    => {:key "value" :a "A" :c "C" :d "D"})
 
   (fact
     "When a handler returns ok-go, any remaining handlers are skipped, and the specified event fires"
@@ -335,8 +334,8 @@ keys, in order"
     (register-handler :e1 :h3 sets-C-and-continues)
     (register-handler :e2 :h1 sets-D-and-continues)
 
-    (fire :e1 {} initial-data)
-    => {:key "value" :a "A" :b "B" :d "D" :barnum.events/log [[:e1 :h1] [:e1 :h2] [:e2 :h1]]})
+    (:data (fire :e1 {} initial-data))
+    => {:key "value" :a "A" :b "B" :d "D"})
 
   (fact
     "When a handler returns fail, any remaining handlers are skipped"
@@ -344,7 +343,19 @@ keys, in order"
     (register-handler :e1 :h2 fails-and-sets-e1)
     (register-handler :e1 :h3 sets-C-and-continues)
 
-    (fire :e1 {} initial-data)
-    => {:key "value" :a "A" :e1 "Error 1" :barnum.events/log [[:e1 :h1] [:e1 :h2]] :barnum.errors/errors [[:e1 :h2 "Error 1 happened"]]})
+    (:data (fire :e1 {} initial-data))
+    => {:key "value" :a "A"}
+
+    ;; actual log looks something like this: [[1423352071475 :e1 :h1] [1423352071475 :e1 :h2]]
+    ;; We'll take each log entry, skip the timestamp (since it varies), and just check the last 2 values
+    (let [log (get-in (fire :e1 {} initial-data) [:barnum.events/context :barnum.events/log])
+          log1 (first log)
+          log2 (second log)]
+      (next log1)
+      => [:e1 :h1]
+
+      (next log2)
+      => [:e1 :h2]))
 
   )
+

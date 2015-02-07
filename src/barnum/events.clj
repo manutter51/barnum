@@ -1,6 +1,5 @@
 (ns barnum.events
   (:require [clojure.set :as set]
-            [clojure.core.match :refer [match]]
             [barnum.results :as res]))
 
 (def registered-events (atom {}))
@@ -241,7 +240,7 @@ validator function to disable validation."
       (validation-fn ctx args)
       (res/ok args))))
 
-(defn run*
+(defn- run*
   "Call each handler in turn, passing the given args to the first handler, and
 passing each successive handler the results returned by the previous handler. If
 a handler returns anything other than an \"ok\" result, stop processing handlers,
@@ -258,34 +257,32 @@ and either fire the next event (on ok-go or fail-go), or return the error result
         ctx (assoc ctx ::handler-key handler-key ::log log)]
     (if (nil? handler-fn)
       (assoc (res/ok args) ::context ctx)
-      (match (validate-args event-key ctx args)
-
-             {:status :not-valid, :errors errors, :data data}
-             (assoc (res/not-valid errors data) ::context ctx)
-
-             {:status :ok, :data data}
-             (match (handler-fn ctx data)
-
-                    {:status :ok, :data data}
-                    (recur handlers ctx data)
-
-                    {:status :ok-go, :next next-event-key, :data data}
-                    (let [handlers (next-event-key @register-handlers)
-                          ctx (assoc ctx :event-key next-event-key)]
-                      (recur handlers ctx data))
-
-                    {:status :fail, :error-key error-key, :message message, :data data}
-                    (assoc (res/fail error-key message data) ::context ctx)
-
-                    {:status :fail-go, :next error-event-key, :error-key error-key, :message error-message
-                     :data data}
-                    (let [handlers (error-event-key @register-handlers)
-                          old-errors (::errors ctx nil)
-                          errors (conj old-errors [(::event-key ctx) (::handler-key ctx) error-message])
-                          ctx (assoc ctx ::errors errors ::event-key error-event-key)]
-                      (recur handlers ctx data))
-
-                    bad (throw (Exception. (str "Invalid event-handler result: " (pr-str bad)))))))))
+      (let [validation-result (validate-args event-key ctx args)
+            validation-status (:status validation-result)
+            errors (:errors validation-result)
+            data (:data validation-result)]
+        (if-not (= :ok validation-status)
+          (assoc (res/not-valid errors data) ::context ctx)
+          (let [handler-result (handler-fn ctx data)
+                status (:status handler-result)
+                data (:data handler-result)
+                next-event-key (:next handler-result)
+                error-key (:error-key handler-result)
+                message (:message handler-result)
+                error-event-key (:error-event-key handler-result)]
+            (condp = status
+              :ok (recur handlers ctx data)
+              :ok-go (let [handlers (next-event-key @registered-handlers)
+                           ctx (assoc ctx :event-key next-event-key)]
+                       (recur handlers ctx data))
+              :fail (assoc (res/fail error-key message data) ::context ctx)
+              :fail-go (let [handlers (error-event-key @registered-handlers)
+                             old-errors (::errors ctx [])
+                             errors (conj old-errors [(::event-key ctx) (::handler-key ctx) error-key message])
+                             ctx (assoc ctx ::errors errors ::event-key error-event-key)]
+                         (recur handlers ctx data))
+              ; else
+              (throw (Exception. (str "Invalid event-handler result: " (pr-str handler-result)))))))))))
 
 (defn fire
   "Triggers the event corresponding to the given key, which must be a
@@ -302,7 +299,7 @@ handlers in turn."
         num-handlers (count handlers)
         ctx (assoc (or ctx {}) ::event-key event-key)]
     (if (zero? num-handlers)
-      (res/ok (assoc args ::context ctx))
+      (assoc (res/ok args) ::context ctx)
       (run* handlers ctx args))))
 
 (defn docs

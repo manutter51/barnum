@@ -1,5 +1,5 @@
 (ns barnum.events.validation
-  (:require [beanbag.core :refer [ok fail skip]]
+  (:require [barnum.results :refer [ok fail]]
             [clojure.set :as set]))
 
 ;; Built-in/generic validation checks for when passing arguments

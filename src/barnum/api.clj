@@ -11,8 +11,6 @@ the (unique) event-key and described by the optional docstring. Each
 event can be further defined by the following options:
     :min-handlers The minimum number of handlers for this event
     :max-handlers The maximum number of handlers for this event
-    :validation-fn A function to call to validate the args when the event is fired
-    :defaults A map of default values for any parameters. If you don't specify a default, the default will be nil.
 
 The remaining parameters to def-event specify the keys that should be
 present in the map that gets passed to registered event handlers when
@@ -99,11 +97,8 @@ was added (if any).  Returns a map containing the status of the last event handl
 to fire plus the data returned by the handler. If no handler is defined for the
 given event, returns a status of :ok, plus the unmodified original data. Throws an
 Exception if the event has not been defined with add-event."
-  [event-key ctx & args]
-  (when-not (even? (count args))
-    (throw (Exception. "All args after the event key must be specified as zero or more key-value pairs.")))
-  (let [args-map (apply hash-map args)]
-    (ev/fire event-key ctx args-map)))
+  [event-key ctx args]
+  (ev/fire event-key ctx args))
 
 (defn docs
   "Returns the docstring supplied when the event was added, plus a list
@@ -135,8 +130,8 @@ and the processed data. Used by event handlers to return results to the
 Barnum event engine. Any additional handlers for the current event will be
 skipped, and the data will be returned immediately to the function that
 fired the original event."
-  [error-message data]
-  (res/fail error-message data))
+  [error-key error-message data]
+  (res/fail error-key error-message data))
 
 (defn fail-go
   "Returns a correctly-formatted tuple containing the handler status (ok),
@@ -144,8 +139,8 @@ the event key for the next event to be fired, and the processed data. Used
 by event handlers to return results to the Barnum event engine and trigger
 a follow-up event without consuming stack space that might lead to a stack
 overflow. Any additional handlers for the current event will be skipped."
-  [error-event-key error-message data]
-  (res/fail-go error-event-key error-message data))
+  [error-event-key error-key error-message data]
+  (res/fail-go error-event-key error-key error-message data))
 
 (defn not-valid
   "Returns a correctly-formatted tuple containing the validation status (not
