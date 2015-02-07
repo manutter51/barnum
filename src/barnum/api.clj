@@ -145,3 +145,12 @@ a follow-up event without consuming stack space that might lead to a stack
 overflow. Any additional handlers for the current event will be skipped."
   [error-event-key error-message data]
   (res/fail-go error-event-key error-message data))
+
+(defn not-valid
+  "Returns a correctly-formatted tuple containing the validation status (not
+valid), a map of keys and error messages (where the key in the error map matches
+the key of the data value that failed validation), and a copy of the data that
+was validated. Used by validation functions to return error messages when validation
+checks fail."
+  [errors data]
+  (res/not-valid errors data))

@@ -1,6 +1,7 @@
 (ns barnum.events
   (:require [clojure.set :as set]
-            [beanbag.core :refer [ok skip fail beanbag? cond-result]]))
+            [clojure.core.match :refer [match]]
+            [barnum.results :as res]))
 
 (def registered-events (atom {}))
 (def registered-handlers (ref {}))
@@ -233,12 +234,12 @@ validator function to disable validation."
 
 (defn validate-args
   "Check for a validation function and call it on the args, if present."
-  [event-key args]
+  [event-key ctx args]
   (let [event (event-key @registered-events)
         validation-fn (:validation-fn event)]
     (if (fn? validation-fn)
-      (validation-fn args)
-      args)))
+      (validation-fn ctx args)
+      (res/ok args))))
 
 (defn run*
   "Call each handler in turn, passing the given args to the first handler, and
@@ -246,49 +247,59 @@ passing each successive handler the results returned by the previous handler. If
 a handler returns anything other than an \"ok\" result, stop processing handlers,
 and either fire the next event (on ok-go or fail-go), or return the error result
 (on fail)."
-  ([handlers args]
-     (run* handlers args '()))
-  ([handlers args results]
-     (let [handler (first handlers)
-           [handler-key handler-fn] handler
-           handlers (rest handlers)
-           run-args (assoc args
-                      :_handler handler-key)]
-       (if (nil? handler-fn)
-         results
-           (cond-result
-            result (handler-fn run-args)
-            :ok (recur handlers args (conj results (ok result)))
-            :ok-stop (conj results (ok result))
-            :fail (recur handlers args (conj results (fail result)))
-            :abort (conj results (fail result))
-            :skip (recur handlers args (conj results (skip result)))
-            (recur handlers args (conj results
-                                       (ok :ok-unknown result))))))))
+  [handlers ctx args]
+  (let [handler (first handlers)
+        [handler-key handler-fn] handler
+        handlers (rest handlers)
+        event-key (::event-key ctx ::no-event)
+        log (::log ctx [])
+        log (conj log [(System/currentTimeMillis) event-key handler-key])
+        ctx (assoc ctx ::handler-key handler-key ::log log)]
+    (if (nil? handler-fn)
+      (res/ok (assoc args ::context ctx))
+      (let [validation-result (validate-args event-key ctx args)
+            validation-status (first validation-result)]
+        (if-not (= :ok validation-status)
+          (assoc validation-result ::context ctx)
+          (let [result (handler-fn ctx (second validation-result))
+                status (first result)]
+            (condp = status
+              :ok (recur handlers ctx (second result))
+              :ok-go (let [next-event-key (second result)
+                           data (nth result 3)
+                           handlers (next-event-key @register-handlers)
+                           ctx (assoc ctx :event-key next-event-key)]
+                       (recur handlers ctx data))
+              :fail (assoc result ::context ctx)
+              :fail-go (let [error-event-key (second result)
+                             error-message (nth result 3)
+                             data (nth result 4)
+                             handlers (error-event-key @register-handlers)
+                             old-errors (:errors ctx nil)
+                             errors (conj old-errors [(::event-key ctx) (::handler-key ctx) error-message])
+                             ctx (assoc ctx ::errors errors ::event-key error-event-key)]
+                         (recur handlers ctx data))
+              ; else
+              ; TODO definitely want some kind of event-tracking "stack trace" here
+              (throw (Exception. "Invalid event handler result")))))))))
 
 (defn fire
   "Triggers the event corresponding to the given key, which must be a
 single keyword. Any additional arguments will be passed to each of the
 registered handlers. Returns the accumulated results of calling each
 of the handlers in turn."
-  [event-key args]
-  (let [event (or (event-key @registered-events)
-                  (throw (Exception. (str "Event not defined: " event-key))))
+  [event-key ctx args]
+  (let [_ (or (event-key @registered-events)
+              (throw (Exception. (str "Event not defined: " event-key))))
         handlers (event-key @registered-handlers)
-        num-handlers (count handlers)]
+        num-handlers (count handlers)
+        ctx (assoc (or ctx {}) ::event-key event-key)]
     (if (zero? num-handlers)
-      (skip (str "No handlers for event " event-key))
-      (let [defaults (or (:defaults (:options event)) {})
-            args (merge defaults args)
-            validation-errors (validate-args event args)
-            ok? (empty? validation-errors)
-            args (when ok? )
-            args (assoc args
-                   :_event event-key
-                   :_fired-at (java.util.Date.))]
-        (if ok?
-            (run* handlers args)
-            (fail validation-errors))))))
+      (res/ok (assoc args ::context ctx))
+      (run* handlers ctx args))))
+
+;; Ok, so I have everything working with variants/tagged unions, but the vectors are all diff
+;; sizes, should I just return maps? Maps will work a lot better with core.match
 
 (defn docs
   "Returns the doc string that was provided when the event was declared."  
