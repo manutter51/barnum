@@ -246,7 +246,8 @@ validator function to disable validation."
 passing each successive handler the results returned by the previous handler. If
 a handler returns anything other than an \"ok\" result, stop processing handlers,
 and either fire the next event (on ok-go or fail-go), or return the error result
-(on fail)."
+(on fail). Args must pass validation as defined by validation-fn for this event,
+(if any)."
   [handlers ctx args]
   (let [handler (first handlers)
         [handler-key handler-fn] handler
@@ -256,32 +257,35 @@ and either fire the next event (on ok-go or fail-go), or return the error result
         log (conj log [(System/currentTimeMillis) event-key handler-key])
         ctx (assoc ctx ::handler-key handler-key ::log log)]
     (if (nil? handler-fn)
-      (res/ok (assoc args ::context ctx))
-      (let [validation-result (validate-args event-key ctx args)
-            validation-status (first validation-result)]
-        (if-not (= :ok validation-status)
-          (assoc validation-result ::context ctx)
-          (let [result (handler-fn ctx (second validation-result))
-                status (first result)]
-            (condp = status
-              :ok (recur handlers ctx (second result))
-              :ok-go (let [next-event-key (second result)
-                           data (nth result 3)
-                           handlers (next-event-key @register-handlers)
-                           ctx (assoc ctx :event-key next-event-key)]
-                       (recur handlers ctx data))
-              :fail (assoc result ::context ctx)
-              :fail-go (let [error-event-key (second result)
-                             error-message (nth result 3)
-                             data (nth result 4)
-                             handlers (error-event-key @register-handlers)
-                             old-errors (:errors ctx nil)
-                             errors (conj old-errors [(::event-key ctx) (::handler-key ctx) error-message])
-                             ctx (assoc ctx ::errors errors ::event-key error-event-key)]
-                         (recur handlers ctx data))
-              ; else
-              ; TODO definitely want some kind of event-tracking "stack trace" here
-              (throw (Exception. "Invalid event handler result")))))))))
+      (assoc (res/ok args) ::context ctx)
+      (match (validate-args event-key ctx args)
+
+             {:status :not-valid, :errors errors, :data data}
+             (assoc (res/not-valid errors data) ::context ctx)
+
+             {:status :ok, :data data}
+             (match (handler-fn ctx data)
+
+                    {:status :ok, :data data}
+                    (recur handlers ctx data)
+
+                    {:status :ok-go, :next next-event-key, :data data}
+                    (let [handlers (next-event-key @register-handlers)
+                          ctx (assoc ctx :event-key next-event-key)]
+                      (recur handlers ctx data))
+
+                    {:status :fail, :error-key error-key, :message message, :data data}
+                    (assoc (res/fail error-key message data) ::context ctx)
+
+                    {:status :fail-go, :next error-event-key, :error-key error-key, :message error-message
+                     :data data}
+                    (let [handlers (error-event-key @register-handlers)
+                          old-errors (::errors ctx nil)
+                          errors (conj old-errors [(::event-key ctx) (::handler-key ctx) error-message])
+                          ctx (assoc ctx ::errors errors ::event-key error-event-key)]
+                      (recur handlers ctx data))
+
+                    bad (throw (Exception. (str "Invalid event-handler result: " (pr-str bad)))))))))
 
 (defn fire
   "Triggers the event corresponding to the given key, which must be a
