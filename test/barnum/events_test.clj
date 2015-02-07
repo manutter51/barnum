@@ -85,14 +85,14 @@
                    :validation-fn nil}})
 
     (fact "If you have no validation fn, execution will proceed as though validation had succeeded."
-          (validate-args :e1 {:key "value"})
+          (validate-args :e1 {} {:key "value"})
           => {:key "value"})
 
     (fact "If you set a new validation fn, it will replace the old one"
           (set-validation-fn! :e1 (fn [& more] (throw (Exception. "Old"))))
           (set-validation-fn! :e1 (fn [& more] (throw (Exception. "New"))))
 
-          (validate-args :e1 {:key "value"})
+          (validate-args :e1 {} {:key "value"})
           => (throws Exception "New")))
 
 ;; Adding handlers
@@ -288,23 +288,23 @@ keys, in order"
 ;; firing event handlers
 ;;   -- generic handlers
 
-(defn sets-A-and-continues [data]
+(defn sets-A-and-continues [ctx data]
   (ok (assoc data :a "A")))
 
-(defn sets-B-and-jumps [data]
+(defn sets-B-and-jumps [ctx data]
   (ok-go :e2 (assoc data :b "B")))
 
-(defn sets-C-and-continues [data]
+(defn sets-C-and-continues [ctx data]
   (ok (assoc data :c "C")))
 
-(defn sets-D-and-continues [data]
+(defn sets-D-and-continues [ctx data]
   (ok (assoc data :d "D")))
 
-(defn fails-and-sets-e1 [data]
-  (fail "Error 1 happened" (assoc data :e1 "Error 1")))
+(defn fails-and-sets-e1 [ctx data]
+  (fail :error-1 "Error 1 happened" data))
 
-(defn aborts-and-sets-e2 [data]
-  (fail-go :on-error-2 "Error 2 happened" (assoc data :e2 "Error 2")))
+(defn aborts-and-sets-e2 [ctx data]
+  (fail-go :on-error-2 :error-2 "Error 2 happened" data))
 
 (def initial-data {:key "value"})
 
@@ -325,7 +325,7 @@ keys, in order"
     (register-handler :e1 :h2 sets-C-and-continues)
     (register-handler :e1 :h3 sets-D-and-continues)
 
-    (fire :e1 initial-data)
+    (fire :e1 {} initial-data)
     => {:key "value" :a "A" :c "C" :d "D" :barnum.events/log [[:e1 :h1] [:e1 :h2] [:e1 :h3]]})
 
   (fact
@@ -335,7 +335,7 @@ keys, in order"
     (register-handler :e1 :h3 sets-C-and-continues)
     (register-handler :e2 :h1 sets-D-and-continues)
 
-    (fire :e1 initial-data)
+    (fire :e1 {} initial-data)
     => {:key "value" :a "A" :b "B" :d "D" :barnum.events/log [[:e1 :h1] [:e1 :h2] [:e2 :h1]]})
 
   (fact
@@ -344,7 +344,7 @@ keys, in order"
     (register-handler :e1 :h2 fails-and-sets-e1)
     (register-handler :e1 :h3 sets-C-and-continues)
 
-    (fire :e1 initial-data)
+    (fire :e1 {} initial-data)
     => {:key "value" :a "A" :e1 "Error 1" :barnum.events/log [[:e1 :h1] [:e1 :h2]] :barnum.errors/errors [[:e1 :h2 "Error 1 happened"]]})
 
   )

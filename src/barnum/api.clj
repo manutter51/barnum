@@ -92,17 +92,18 @@ that have errors."
   (ev/check))
 
 (defn fire
-  "Attempts to fire the given event using the given args (specified as
+  "Attempts to fire the given event using the given args (specified as a map of
 key-value pairs), after first supplying any default values and then
 validating the args with the validation function supplied when the event
-was added (if any).  Returns a list of the handler results, in inverse
-order (last handler result is first in the list, and so on). Throws an
+was added (if any).  Returns a map containing the status of the last event handler
+to fire plus the data returned by the handler. If no handler is defined for the
+given event, returns a status of :ok, plus the unmodified original data. Throws an
 Exception if the event has not been defined with add-event."
-  [event-key & args]
+  [event-key ctx & args]
   (when-not (even? (count args))
     (throw (Exception. "All args after the event key must be specified as zero or more key-value pairs.")))
   (let [args-map (apply hash-map args)]
-    (ev/fire event-key args-map)))
+    (ev/fire event-key ctx args-map)))
 
 (defn docs
   "Returns the docstring supplied when the event was added, plus a list

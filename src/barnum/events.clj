@@ -289,9 +289,12 @@ and either fire the next event (on ok-go or fail-go), or return the error result
 
 (defn fire
   "Triggers the event corresponding to the given key, which must be a
-single keyword. Any additional arguments will be passed to each of the
-registered handlers. Returns the accumulated results of calling each
-of the handlers in turn."
+single keyword. The context (ctx) is a map intended for use by the application
+to store any application-specific data (e.g. database connections and other
+dependencies), as well as any metadata related to event system execution.
+The args param is a map of key-value pairs that will be passed to each of the
+registered handlers. Returns the accumulated results of calling each of the
+handlers in turn."
   [event-key ctx args]
   (let [_ (or (event-key @registered-events)
               (throw (Exception. (str "Event not defined: " event-key))))
@@ -301,9 +304,6 @@ of the handlers in turn."
     (if (zero? num-handlers)
       (res/ok (assoc args ::context ctx))
       (run* handlers ctx args))))
-
-;; Ok, so I have everything working with variants/tagged unions, but the vectors are all diff
-;; sizes, should I just return maps? Maps will work a lot better with core.match
 
 (defn docs
   "Returns the doc string that was provided when the event was declared."  
