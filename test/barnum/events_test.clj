@@ -76,7 +76,7 @@
 
     (fact "You can reset the validation function to nil"
           (set-validation-fn! :e1 identity)
-          (set-validation-fn! :e1 nil)
+          (set-validation-fn! :e1 nil :override)
 
           @registered-events
           => {:e1 {:key :e1
@@ -88,9 +88,22 @@
           (:data (validate-args :e1 {} {:key "value"}))
           => {:key "value"})
 
+    (fact "You cannot replace an existing validation fn unless you specify the override flag."
+          (set-validation-fn! :e1 identity)
+          (set-validation-fn! :e1 even? :override)
+
+          (:e1 @registered-events)
+          => {:key :e1
+              :docstring "Event 1"
+              :options {:min-handlers 0 :max-handlers Integer/MAX_VALUE}
+              :validation-fn even?}
+
+          (set-validation-fn! :e1 odd?)
+          => (throws Exception "Cannot replace validation function on event :e1, override flag not specified."))
+
     (fact "If you set a new validation fn, it will replace the old one"
           (set-validation-fn! :e1 (fn [& more] (throw (Exception. "Old"))))
-          (set-validation-fn! :e1 (fn [& more] (throw (Exception. "New"))))
+          (set-validation-fn! :e1 (fn [& more] (throw (Exception. "New"))) :override)
 
           (validate-args :e1 {} {:key "value"})
           => (throws Exception "New")))

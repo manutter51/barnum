@@ -2,8 +2,9 @@
 
 The Barnum event engine provides a generic library for defining arbitrary
 events, assigning handlers to those events, and firing events. Event firing
-is asynchronous, but returns a future, so you can have event handlers that
-return a result that you process whenever you like.
+is synchronous, but you can easily wrap the `fire!` function in a future, so
+you can have event handlers that return a result that you process whenever
+you like.
 
 [![Build Status](https://travis-ci.org/manutter51/barnum.png)](https://travis-ci.org/manutter51/barnum.png)
 
@@ -48,15 +49,16 @@ will begin runtime execution by firing the appropriate events. As each event is 
 it will be given a map containing the event data. This map will be passed through
 the validation function, if any, and after successfully validating, will be passed
 to the handler function. The handler function will do whatever processing is necessary,
-and then return a result. The result will always be a vector containing a status key
-(`:ok` or `:ok-go`, for example), an optional relay event key, plus the result data. By
-convention, an event handler should always return all the data that was given to it,
-presumably modified by the handler, so that application state can be easily threaded
-through a chain of event handlers.
+and then return a result. The result will always be a map containing predefined keys
+for `:status` and `:data`, as well as any additional keys like `:next` containing the
+next event to fire, or `:message` for any error messages. The result map will also
+contain a key of `:barnum.events/context` containing information about the details of
+event handling, such as which handlers were fired, what time (in milliseconds) each
+handler began, and any errors which arose.
 
-The relay event key is used to specify the next event to be fired, to avoid the stack
+The `:next` event key is used to specify the next event to be fired, to avoid the stack
 overflow that might occur if one handler fired an event that triggered a handler that
-fired an event that triggered a handler, etc. etc. By returning the relay event key
+fired an event that triggered a handler, etc. etc. By returning the `:next` event key
 from the handler, trampoline-style, each handler can pass data on to the next stage
 of processing without tying up a stack frame. If processing is complete and no further
 events need to be triggered, simply omit the relay event key, and Barnum will return
@@ -66,8 +68,7 @@ the result to whatever process fired the original event.
 
 Sometimes you may want multiple handlers to respond to the same event. For example,
 you might want an event that saves a record in a database, makes a log entry, and
-sends off an email notification, with the last two actions happening asynchronously
-to the main program flow. Or you may have several handlers that need to look at the
+sends off an email notification. Or you may have several handlers that need to look at the
 data and decide whether to handle the event or hand it off to the next handler, depending
 on (for example) the contents of a certain form field. Barnum allows you to handle
 such cases by assigning multiple handlers to the same event.
@@ -76,14 +77,13 @@ To avoid confusion, each event handler must be given a unique ID in the form of 
 keyword. These keyword ID's can then be used for logging, adding and removing handlers,
 and rearranging the order of handlers on a keyword.
 
-Event handlers return a vector result containing a status keyword followed by the result
-data. The status keyword indicates how event processing should proceed for events with
-multiple handlers, as follows:
+Event handlers use functions in the `barnum.results` namespace to return a properly-formated
+hash map, as described above. The `:barnum.results` functions to use are as follows:
 
-  * `:ok` -- No processing errors, pass data to next handler
-  * `:ok-go (plus relay event key)` -- No processing errors, do NOT pass to next handler, but fire relay event instead
-  * `:fail` -- Error during processing, do not pass to next handler
-  * `:fail-go (plus relay event key)` -- Error during processing, fire event to trigger app-level error handling
+  * `(ok data)` -- Success, pass data to next handler
+  * `(ok-go next-event-key data)` -- Success, do NOT pass to next handler, but fire specified event instead
+  * `(fail error-key error-message data)` -- Error during processing, do not pass to next handler
+  * `(fail-go next-event-key error-key error-message data)` -- Error during processing, fire event to trigger app-level error handling
 
 These different status levels allow you to exercise a certain amount of flexibility in
 logging events, throwing exceptions, re-routing events, or other special processing, but the
@@ -95,13 +95,12 @@ or you fire a new event, or you return to the function that fired the original e
     (ns my.namespace
       (:require [barnum.api :as ev]))
 
-The core functionality of Barnum can be broken down into five types of
+The core functionality of Barnum can be broken down into four types of
 tasks.
 
  * Defining events
  * Registering validation functions
  * Registering event handlers
- * Registering timeouts and timeout handlers on an event
  * Firing events
 
 In addition, Barnum has functions for checking the number of handlers 
@@ -112,8 +111,8 @@ handlers are executed in response to an event.
 
 Events are defined using keywords as the event name. For simple systems,
 you can use simple keywords like `:open` or `:init`, but for more complex
-systems, you might consider using hyphenated names like `:resource-load`
-and `:resource-start`. To add an event definition, use the `add-event`
+systems, you might consider using namespaced keywords like `:resource/load`
+and `:resource/start`. To add an event definition, use the `add-event`
 function
 
     (ev/add-event event-key docstring options)
@@ -134,7 +133,10 @@ The options argument is a map with the following keys:
 In an architecture where you call one or more plugins to set up your event
 handlers, you can call `(ev/check)` after setup to compare the number
 of handlers assigned to each event against the `:min-handlers` (default
-zero) and `:max-handlers` (default Integer/MAX_VALUE) for that event.
+zero) and `:max-handlers` (default Integer/MAX_VALUE) for that event. This
+way you can set up events that need to be handled by at least one handler
+and/or at most one handler. The `(ev/check)` function will return a map of
+all events that have errors, and the error(s) for each event.
 
 *Note:* Each event can be defined only once. Attempting to add the same
 event key more than once will throw an exception.

@@ -221,15 +221,24 @@ that have errors."
                 nil
                 [event-key errors]))))))
 
+(defn- set-1-validation-fn! [event-key validator-fn override?]
+  (let [existing (get-in @registered-events [event-key :validation-fn])]
+    (if (and existing (not= :override override?))
+      (throw (Exception.
+               (str "Cannot replace validation function on event "
+                    event-key
+                    ", override flag not specified."))))
+    (swap! registered-events assoc-in [event-key :validation-fn] validator-fn)))
+
 (defn set-validation-fn!
   "Sets the validation fn for a specific event or set of events. Pass nil as the
 validator function to disable validation."
-  [event-key validator-fn]
+  [event-key validator-fn & [override?]]
   (let [event-keys (if (set? event-key) event-key #{ event-key })]
     (doseq [k event-keys]
             (if-not (keyword? k) (throw (Exception. (str "Cannot set validation function: "
                                                          (pr-str k) " is not a keyword"))))
-            (swap! registered-events assoc-in [k :validation-fn] validator-fn))))
+            (set-1-validation-fn! k validator-fn override?))))
 
 (defn validate-args
   "Check for a validation function and call it on the args, if present."
