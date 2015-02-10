@@ -89,6 +89,25 @@ that have errors."
   []
   (ev/check))
 
+(defn set-validation-fn!
+  "Sets the validation function to be used to validate the event data being
+passed to an event handler. Your validation function should take 2 arguments,
+`ctx` (a map containing application-specific context) and data (the values to
+be processed by the handler). Return nil if there are no errors in the data,
+or a map of keys and error messages, where the key identifies which data
+value had the error. For example, if the data was supposed to contain a key
+for :email, and the key was missing or the corresponding value was nil,
+your result would be {:email \"Required email not found\"}.
+
+Only one validation function can be set on any given event. To replace an
+existing validation function, pass :override as the third argument to this
+function.
+
+To attach the same validation function to multiple events, pass a set of event
+keys as the first argument."
+  [event-key validation-fn & [override?]]
+  (ev/set-validation-fn! event-key validation-fn override?))
+
 (defn fire
   "Attempts to fire the given event using the given args (specified as a map of
 key-value pairs), after first supplying any default values and then
@@ -96,9 +115,16 @@ validating the args with the validation function supplied when the event
 was added (if any).  Returns a map containing the status of the last event handler
 to fire plus the data returned by the handler. If no handler is defined for the
 given event, returns a status of :ok, plus the unmodified original data. Throws an
-Exception if the event has not been defined with add-event."
-  [event-key ctx args]
-  (ev/fire event-key ctx args))
+Exception if the event has not been defined with add-event.
+
+Takes an optional Barnum context (hash-map) as the second argument. The Barnum
+event engine uses this internally to compile a history of events and/or errors
+that occur during event handling."
+  [event-key & args]
+  (let [first-arg (first args)
+        [ctx args] (if (keyword? first-arg) [{} args] [first-arg (next args)])
+        args (apply hash-map args)]
+    (ev/fire event-key ctx args)))
 
 (defn docs
   "Returns the docstring supplied when the event was added, plus a list

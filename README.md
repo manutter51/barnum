@@ -78,7 +78,7 @@ keyword. These keyword ID's can then be used for logging, adding and removing ha
 and rearranging the order of handlers on a keyword.
 
 Event handlers use functions in the `barnum.results` namespace to return a properly-formated
-hash map, as described above. The `:barnum.results` functions to use are as follows:
+hash map, as described above. The `barnum.results` functions to use are as follows:
 
   * `(ok data)` -- Success, pass data to next handler
   * `(ok-go next-event-key data)` -- Success, do NOT pass to next handler, but fire specified event instead
@@ -156,7 +156,9 @@ behavior is to throw an error unless the override flag is set.
     (ev/add-validation-fn event-key fn :override)
 
 The `:override` keyword is optional. If present, it allows the given function
-to silently replace any existing validation function for that event.
+to silently replace any existing validation function for that event. To add the
+same validation function to multiple events, pass a set of event keys as the
+event-key argument.
 
 ### Adding Event Handlers
 
@@ -164,15 +166,14 @@ to silently replace any existing validation function for that event.
 
 To register an event handler, call `add-handler` with the event key, a
 unique handler key, and the handler function. Each handler function must
-take a single argument, which is the map containing the event parameters.
-In addition to the arguments you pass to the ev/fire function, the
-parameter map will also contain three additional parameters:
+take two arguments, a context argument, and a data argument. The context
+argument is a map that will contain any application specific context, such
+as database connections, loggers, etc. The context map will also contain
+the current event key and current handler key, should you wish to refer to
+them in your handler (e.g. for logging).
 
- * `:_event` - The event key (in case the same handler handles more than one event)
- * `:_handler` - The handler key of the current handler, for logging, error-handling, etc
- * `:_fired-at` - A Java Date object recording the time the event fired
-
-These additional keys will automatically be added by the barnum ev/fire function.
+The data argument will contain the event-specific data to be processed by
+your event handler.
 
 ### Managing Event Handlers
 
@@ -208,8 +209,8 @@ event, or an empty map if there are no errors.
 
 ### Writing event handlers
 
-Event handlers return a vector containing a status key, an optional event
-key, and a map containing the (modified) event data.
+Event handlers must use functions from the `barnum.results` namespace to return the
+results produced by the handler.
 
 To write an event handler, `require` the `barnum.results` namespace, and then
 use the `ok`, `ok-go`, `fail`,  and `fail-go` functions to wrap any data
@@ -245,49 +246,45 @@ validation function may be attached to the event you specify.
           (ok-go :view-profile data))))
 
 
-The `fail` function takes two arguments: an error message, and the data to be
-returned by your handler. When you return a `fail` result, Barnum wraps the
-error message into a special data structure that it includes in your data under
-the key `:barnum.errors/handler-errors`, and then returns the data to the function
-that fired the original event. If there are any other handlers for the current
-event, they will _not_ be executed; `fail` returns immediately to the calling
-function.
+The `fail` function takes three arguments: an error key (similar to an error
+code, but why pass an arbitrary number when you can use a human readable key?),
+an error message, and the data to be returned by your handler. When you return
+a `fail` result, Barnum wraps the arguments into a special data structure that
+includes the error key, error message, and data under they keys `:error-key`,
+`:message` and `:data`, respectively. If there are any other handlers for the
+current event, they will _not_ be executed; a `fail` is returned immediately
+to the calling function.
 
-The `:barnum.errors/handler-errors` key points to a vector of tuples containing the
-event handler key and the text of the error message. For example, if you had an
-event named `:my-risky-event`, and you registered a handler named `:my-error-prone-handler`,
-returning `(fail "it died" data)` would produce a value for `data` that looked
-like this:
+The `:barnum.events/errors` key points to a vector of tuples containing the
+system time in millis, the event key, the event handler key, the error key,
+and the text of the error message. For example, if you had an event named
+`:my-risky-event`, and you registered a handler named `:my-error-prone-handler`,
+returning `(fail :some-error "it died" data)` would produce a value for `data`
+that looked like this:
 
-    {:barnum.errors/handler-errors [[:my-error-prone-handler "it died"]]
+    {:barnum.events/errors
+      [[1423567342887 :my-risky-event :my-error-prone-handler some-error "it died"]]
      ; whatever else was in data
      }
 
-If the data already has a value stored under `:barnum-errors/handler-errors`,
-the new error message will be concatenated onto the list by adding the new tuple
-to the end of the list. For example, if the data above were returned to a function
-that decided to also call `fail`, you might end up with data that looked something
-like this:
+If the data already has a value stored under `:barnum-events/errors`, the new error
+message will be concatenated onto the list by adding the new tuple to the end of the
+list.
 
-    {:barnum.errors/handler-errors [[:my-error-prone-handler "it died"]
-                                    [:my-parent-handler "error-prone-handler died"]]
-     ; whatever else was in the data
-    }
-
-The `fail-go` function takes three arguments: the event key of the next event to
-fire, an error message, and the data returned by your handler. When you return a
-`fail-go` result, Barnum wraps up the error message just as for a `fail` result,
-and then immediately fires the event you specify, passing it the data you return.
-Normally, you wouldn't put a validation function on a handler for a failure event,
-because you don't want to fail to handle a failure (!), but if there is one,
+The `fail-go` function takes four arguments: the event key of the next event to
+fire, an error key, an error message, and the data returned by your handler. When
+you return a `fail-go` result, Barnum wraps up the error message just as for a `fail`
+result, and then immediately fires the event you specify, passing it the data you
+return. Normally, you wouldn't put a validation function on a handler for a failure
+event, because you don't want to fail to handle a failure (!), but if there is one,
 Barnum will pass it your data before calling the event handler(s) for the event
 you specify.
 
-Inside a handler function, you can do anything you like, including firing
-off other events. Beware of nesting your events too deeply, however, or
-firing event A, whose handler fires event B, whose handler fires event A
-again. If you need any kind of nested or cyclical event sequence, use
-`ok-go` results to keep the stack from overflowing.
+Inside a handler function, you can do anything you like, including firing off other
+events. Beware of nesting your events too deeply, however, or firing event A, whose
+handler fires event B, whose handler fires event A again. If you need any kind of
+nested or cyclical event sequence, use `ok-go` results to keep the stack from
+overflowing.
 
 ### Changing the order of event handlers
 
@@ -315,55 +312,51 @@ in order, for any given event.
 
 ### Triggering events
 
-/TODO:/ use core.async instead of futures?
-
 To trigger an event and execute its associated handlers, use the `fire`
 function. The `fire` function takes the event key as its first argument,
 followed by zero or more key/value pairs.
 
     (ev/fire :some-event :data-1 "Some data", :data-2 "More data")
 
-The `fire` function returns the collected results of all the handlers 
-for that event, in last-to-first order. To get the result of the last 
-handler to fire, just call `first` on the seq. By default, events are
-handled synchronously, but you can easily trigger asynchronous event
-handling by wrapping `fire` inside a `future`.
+The `fire` function returns the accumulated result of all the handlers
+for that event, meaning that if you have 3 handlers on a function, the
+data will be handed to the first handler, the results of the first handler
+will be handed to the second, the results of the second handed to the
+third, and the results of the third returned to your function. That's
+assuming all goes well of course--any handler can return an error result
+and-or specify a new event to jump to instead of continuing on to the
+next handler. You should always examine the `:status` key to determine
+whether or not any errors occurred during event handling.
 
-NOTES: Don't like that last-to-first vector. The event engine should
-treat data like a pipeline or assembly line, where the same product
-gets passed from station to station, being modified as it goes, and
-then drops off at the end in a completed state.
-
-NOTES: The `fire` fn should pass Barnum metadata to the event handler
-as the last argument, so that the handler can grab the current event
+By default, events are handled synchronously, but you can easily trigger
+asynchronous event handling by wrapping `fire` inside a `future`.
 
 ### Validating event parameters
 
 You can write custom validation functions to be used whenever an event
 is fired, to check the parameters being passed along with the event. This
-validation function should take two arguments: `params` and `args`. The
-`params` argument is the list of parameters specified when the event was
-defined, and the `args` argument is a map of key-value pairs where the key
-is one of the params, and the value is the data associated with that key
-at the time the event was fired. Return a list of validation errors, if 
-any, or nil if there were no errors.
+validation function should take two arguments: `ctx` and `args`. The
+`ctx` argument is a map of application-specific context values, and the
+`args` argument is a map of key-value pairs containing the data to be
+processed by the handler. Return a list of validation errors, if any, or
+nil if there were no errors.
 
-To assign a validation function to an event, provide the function as the
-`:validation-fn` key in the options map when you initially add the event.
+To assign a validation function to an event, call the `set-validation-fn!`
+function, passing in the event key and the validation function. Events
+can only have one validation function per event key, and it is an error
+to try and assign a validation function to an event that already has one.
+To replace an existing validation function, pass `:override` as the third
+argument to `set-validation-fn!`.
 
-    (require '[barnum.events.validation :refer [require-all]])
-    (add-event :e1 "My Event" {:validation-fn require-all} [:arg1 :arg2])
-
-Barnum includes the following predefined validation functions, in the
-`barnum.events.validation` namespace:
-
- * `require-all` -- fails if any args from the params list have values that are nil
- * `restrict-all` -- fails if any key in the `args` map is not in the `params` list
+If you wish to apply the same validation function to multiple events, you
+can pass a set of event keys as the first argument.
 
 ## ToDo
 
- * Barnum should also add automatic handler logging by associating a vector
-   of handler keys and status results under a key like `:barnum.log/handlers.
+ * Add functions for reading the event logs and error stacks from the
+   Barnum context
+ * Add support for multiple validation functions per event, where each
+   function receives the results of the function before it.
 
 ## License
 

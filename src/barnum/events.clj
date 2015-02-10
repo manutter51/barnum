@@ -278,17 +278,18 @@ and either fire the next event (on ok-go or fail-go), or return the error result
                 next-event-key (:next handler-result)
                 error-key (:error-key handler-result)
                 message (:message handler-result)
+                error-frame [(System/currentTimeMillis) (::event-key ctx) (::handler-key ctx) error-key message]
+                error-stack (if (or error-key message) (conj (::errors ctx []) error-frame)
+                                                       (::errors ctx []))
                 error-event-key (:error-event-key handler-result)]
             (condp = status
               :ok (recur handlers ctx data)
               :ok-go (let [handlers (next-event-key @registered-handlers)
                            ctx (assoc ctx :event-key next-event-key)]
                        (recur handlers ctx data))
-              :fail (assoc (res/fail error-key message data) ::context ctx)
+              :fail (assoc (res/fail error-key message data) ::context (assoc ctx ::errors error-stack))
               :fail-go (let [handlers (error-event-key @registered-handlers)
-                             old-errors (::errors ctx [])
-                             errors (conj old-errors [(::event-key ctx) (::handler-key ctx) error-key message])
-                             ctx (assoc ctx ::errors errors ::event-key error-event-key)]
+                             ctx (assoc ctx ::errors error-stack ::event-key error-event-key)]
                          (recur handlers ctx data))
               ; else
               (throw (Exception. (str "Invalid event-handler result: " (pr-str handler-result)))))))))))
@@ -315,11 +316,7 @@ handlers in turn."
   "Returns the doc string that was provided when the event was declared."  
   [event-key]
   (if-let [event (event-key @registered-events)]
-    (let [docstring (:docstring event)
-          line1 (apply "Params: " str event-key
-                       "{" (doall
-                        (interpose " _, " (:params event))) "}")]
-      (str line1 "\n" docstring))
+    (or (:docstring event) (str "Event " (name event-key) " has no docs."))
     (str "Unknown event " event-key)))
 
 

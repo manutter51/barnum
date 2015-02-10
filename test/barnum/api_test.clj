@@ -59,6 +59,15 @@
       (get-in @registered-events [:m3 :options])
       => (just {:min-handlers 1 :max-handlers 1}))
 
+(fact "docs return docstring"
+      (add-event :d1 "My docstring")
+      (docs :d1)
+      => (exactly "My docstring")
+
+      (add-event :d2)
+      (docs :d2)
+      => (exactly "Event d2 has no docs."))
+
 ;; Adding handlers
 (with-state-changes
   [(before :facts
@@ -276,8 +285,6 @@ keys, in order"
 (defn aborts-and-sets-e2 [ctx data]
   (fail-go :on-error-2 :error-2 "Error 2 happened" data))
 
-(def initial-data {:key "value"})
-
 (with-state-changes
   [(before :facts
            (do
@@ -294,7 +301,7 @@ keys, in order"
     (add-handler :e1 :h2 sets-C-and-continues)
     (add-handler :e1 :h3 sets-D-and-continues)
 
-    (:data (fire :e1 {} initial-data))
+    (:data (fire :e1 :key "value"))
     => {:key "value" :a "A" :c "C" :d "D"})
 
   (fact
@@ -304,8 +311,15 @@ keys, in order"
     (add-handler :e1 :h3 sets-C-and-continues)
     (add-handler :e2 :h1 sets-D-and-continues)
 
-    (:data (fire :e1 {} initial-data))
+    (:data (fire :e1 :key "value"))
     => {:key "value" :a "A" :b "B" :d "D"})
+
+  (fact
+    "Takes an optional second argument containing a Barnum context"
+    (add-handler :e1 :h1 sets-A-and-continues)
+
+    (:barnum.events/context (fire :e1 {:debug true} :key "value"))
+    => (contains {:debug true}))
 
   (fact
     "When a handler returns fail, any remaining handlers are skipped"
@@ -313,7 +327,7 @@ keys, in order"
     (add-handler :e1 :h2 fails-and-sets-e1)
     (add-handler :e1 :h3 sets-C-and-continues)
 
-    (:data (fire :e1 {} initial-data))
+    (:data (fire :e1 :key "value"))
     => {:key "value" :a "A"})
 
   )
