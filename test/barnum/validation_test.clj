@@ -1,7 +1,6 @@
 (ns barnum.validation-test
   (:require [midje.sweet :refer :all]
             [barnum.api :refer :all]
-            [barnum.events :refer [registered-events registered-handlers]]
             [barnum.events.validation :refer :all]))
 
 (defn do-nothing-handler [args]

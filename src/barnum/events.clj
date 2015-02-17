@@ -2,10 +2,6 @@
   (:require [clojure.set :as set]
             [barnum.results :as res]))
 
-(def registered-events (atom {}))
-(def registered-handlers (ref {}))
-#_(def tmp-handlers (atom {}))
-
 (defn- get-docstring [params]
   (let [docstring (first params)
         docstring (if (string? docstring) docstring)
@@ -51,46 +47,62 @@
      :options opts}))
 
 (defn register-event
-  "Adds an event structure to the registered-events list"
-  [event-key params]
-  ;; takes the event name plus a vector with the following items, in order:
+  "Adds an event structure to the registered-events list in a given context"
+  [ctx event-key params]
+  ;; takes a context, an event name, and a vector with the following items, in order:
   ;;    string [optional] -- event docstring
-  ;;    event options -- :min-handlers or max-handlers, followed by a number
+  ;;    event options -- :min-handlers or :max-handlers, followed by a number
   (if-not (keyword? event-key)
     (throw (Exception. "Event key must be a keyword")))
-  (let [event-struct (build-event-def event-key params)]
-    (if-let [existing (event-key @registered-events)]
+  (if-not (map? ctx)
+    (throw (Exception. "Context must be a map")))
+  (let [event-struct (build-event-def event-key params)
+        registered-events (::registered-events ctx {})]
+    (if-let [existing (event-key registered-events)]
       (throw (Exception. (str
                           "Duplicate event definition: " event-key " "
                           (:docstring existing)))))
-    (swap! registered-events assoc event-key event-struct)))
+    (assoc-in ctx [::registered-events event-key] event-struct)))
+
+(defn- throw-if-not-valid-event! [ctx event-key handler-key]
+  (when (nil? (event-key (::registered-events ctx {})))
+    (if (nil? handler-key)
+      (throw (Exception. (str "Unknown event " (pr-str event-key))))
+      (throw (Exception. (str "Handler " handler-key
+                              " cannot be used with unknown event " event-key))))))
 
 (declare register-handlers)
+
 (defn register-handler
-  [event-key handler-key handler-fn]
-  (cond (set? event-key) (register-handlers event-key handler-key handler-fn)
-        (keyword? event-key) (if (nil? (event-key @registered-events))
-                               (throw (Exception. (str "Cannot register handler "
-                                  handler-key " for unknown event " event-key)))
-                               (dosync (let [handlers (or (event-key @registered-handlers) [])
-                                             existing (filter #(= handler-key (first %)) handlers)
-                                             handlers (conj handlers [handler-key handler-fn])]
-                                         (if (empty? existing)
-                                           (commute registered-handlers assoc event-key handlers )
-                                           (throw (Exception. (str "Duplicate event handler "
-                                                                   handler-key " for event "
-                                                                   event-key)))))
-                                       ;; return handlers, for debugging/repl
-                                       @registered-handlers))
-        :else (throw (Exception.
-                      "Event key must be a keyword or a set of keywords."))))
+  [ctx event-key handler-key handler-fn]
+  (if-not (map? ctx)
+    (throw (Exception. "Context must be a map")))
+  (cond
+    (coll? event-key) (register-handlers ctx event-key handler-key handler-fn)
+    (keyword? event-key) (do
+                           (throw-if-not-valid-event! ctx event-key handler-key)
+                           (let [registered-handlers (::registered-handlers ctx {})
+                                 handlers (event-key registered-handlers [])
+                                 existing (filter #(= handler-key (first %)) handlers)
+                                 handlers (conj handlers [handler-key handler-fn])]
+                             (if (empty? existing)
+                               (assoc-in ctx [::registered-handlers event-key] handlers)
+                               (throw (Exception. (str "Duplicate event handler "
+                                                       handler-key " for event "
+                                                       event-key))))))
+    :else (throw (Exception. "Event key must be a keyword or a collection (vector/set/seq) of keywords."))))
 
-(defn register-handlers [event-keys handler-key handler-fn]
-  (doseq [event-key event-keys]
-    (register-handler event-key handler-key handler-fn)))
+(defn register-handlers
+  ([ctx event-keys handler-key handler-fn]
+    (register-handlers ctx (first event-keys) (next event-keys) handler-key handler-fn))
+  ([ctx event-key event-keys handler-key handler-fn]
+    (let [ctx (register-handler ctx event-key handler-key handler-fn)]
+      (if event-keys
+        (recur ctx (first event-keys) (next event-keys) handler-key handler-fn)
+        ctx))))
 
-(defn handler-keys [event-key]
-  (let [handlers (event-key @registered-handlers)]
+(defn handler-keys [ctx event-key]
+  (let [handlers (event-key (::registered-handlers ctx {}))]
     (map first handlers)))
 
 (defn add-extracted [extracted found]
@@ -117,48 +129,51 @@
          (recur next-key remaining-keys extracted remaining-handlers)))))
 
 (defn order-first
-  [event-key handler-key-list]
-  (dosync
-   (let [handlers (or (event-key @registered-handlers) [])
-         [extracted leftover] (extract-handlers handler-key-list handlers)
-         handlers (concat extracted leftover)]
-     (when-not (empty? handlers)
-       (commute registered-handlers assoc event-key handlers)))))
+  [ctx event-key handler-key-list]
+  (let [registered-handlers (::registered-handlers ctx {})
+        handlers (event-key registered-handlers [])
+        [extracted leftover] (extract-handlers handler-key-list handlers)
+        handlers (concat extracted leftover)]
+    (when-not (empty? handlers)
+      (assoc-in ctx [::registered-handlers event-key] handlers))))
 
 (defn order-last
-  [event-key handler-key-list]
-  (dosync
-   (let [handlers (or (event-key @registered-handlers) [])
-         [extracted leftover] (extract-handlers handler-key-list handlers)
-         handlers (concat leftover extracted)]
-     (when-not (empty? handlers)
-       (commute registered-handlers assoc event-key handlers)))))
+  [ctx event-key handler-key-list]
+  (let [registered-handlers (::registered-handlers ctx {})
+        handlers (event-key registered-handlers [])
+        [extracted leftover] (extract-handlers handler-key-list handlers)
+        handlers (concat leftover extracted)]
+    (when-not (empty? handlers)
+      (assoc-in ctx [::registered-handlers event-key] handlers))))
 
 (declare remove-handlers)
+
 (defn remove-handler
   "Removes the given handler from the given event key(s). The event
 key can be a single keyword, or a set of keywords, to match any of
 the contained keys."
-  [event-key handler-key]
-  (cond (set? event-key) (remove-handlers event-key handler-key)
-        (keyword? event-key)
-        (if (nil? (event-key @registered-events))
-          (throw (Exception. (str "Cannot remove handler " handler-key
-                                  " for unknown event " event-key)))
-          (dosync (let [handlers (or (event-key @registered-handlers) [])
-                        handlers (filter
-                                  #(not= handler-key (first %))
-                                  handlers)]
-                    (commute registered-handlers
-                             assoc event-key handlers ))
-                  @registered-handlers))
+  [ctx event-key handler-key]
+  (cond (coll? event-key) (remove-handlers ctx  event-key handler-key)
+        (keyword? event-key) (do
+                               (throw-if-not-valid-event! ctx event-key handler-key)
+                               (let [registered-handlers (::registered-handlers ctx {})
+                                     handlers (event-key registered-handlers [])
+                                     handlers (filter
+                                                #(not= handler-key (first %))
+                                                handlers)]
+                                 (assoc-in ctx [::registered-handlers event-key] handlers)))
         :else (throw (Exception.
-                      "Event key must be a keyword or a set of keywords."))))
+                       "Event key must be a keyword or a collection (vector/set/seq) of keywords."))))
 
 (defn remove-handlers
-  [event-keys handler-fn]
-  (doseq [event-key event-keys]
-    (remove-handler event-key handler-fn)))
+  ([ctx event-keys handler-key]
+    (remove-handlers ctx (first event-keys) (next event-keys) handler-key))
+  ([ctx event-key event-keys handler-key]
+    (let [ctx (remove-handler ctx event-key handler-key)]
+      (if event-keys
+        (recur ctx (first event-keys) (next event-keys) handler-key)
+        ctx))))
+
 
 (defn- replacer
   [handler-key handler-fn]
@@ -169,23 +184,30 @@ the contained keys."
 
 (declare replace-handlers)
 (defn replace-handler
-  "Replaces the matching handler (if any) with the new function. If the function has not been set as a handler for the given event(s), then no replacement will take place."
-  [event-key handler-key handler-fn]
-  (cond (set? event-key) (replace-handlers event-key handler-key handler-fn)
-        (keyword? event-key)
-        (dosync
-         (let [handlers (event-key @registered-handlers)
-               handlers (doall (map (replacer handler-key handler-fn)
-                                    handlers))]
-           (commute registered-handlers
-                    assoc event-key handlers)))
-        :else (throw (Exception.
-                      "Event key must be a keyword or a set of keywords."))))
+  "Replaces the matching handler (if any) with the new function. If the function has not been
+set as a handler for the given event(s), then no replacement will take place."
+  [ctx event-key handler-key handler-fn]
+  (cond
+    (coll? event-key) (replace-handlers ctx event-key handler-key handler-fn)
+    (keyword? event-key) (do
+                           (throw-if-not-valid-event! ctx event-key handler-key)
+                           (let [registered-handlers (::registered-handlers ctx {})
+                                 handlers (event-key registered-handlers)
+                                 handlers (doall (map (replacer handler-key handler-fn)
+                                                      handlers))]
+                             (assoc-in ctx [::registered-handlers event-key] handlers)))
+
+    :else (throw (Exception.
+                       "Event key must be a keyword or a collection (vector/set/seq) of keywords."))))
 
 (defn replace-handlers
-  [event-keys handler-key handler-fn]
-  (doseq [event-key event-keys]
-    (replace-handler event-key handler-key handler-fn)))
+  ([ctx event-keys handler-key handler-fn]
+    (replace-handlers ctx (first event-keys) (next event-keys) handler-key handler-fn))
+  ([ctx event-key event-keys handler-key handler-fn]
+    (let [ctx (replace-handler ctx event-key handler-key handler-fn)]
+      (if event-keys
+        (recur ctx (first event-keys) (next event-keys) handler-key handler-fn)
+        ctx))))
 
 (defn check
   "Checks the current event map and ensures that each event has at least
@@ -193,15 +215,15 @@ the minimum number of handlers specified in the min-handlers option, but
 no more than the maximum number of handlers specified in the max-handlers
 option. Returns a map of event keys mapped to error messages for any events
 that have errors."
-  []
+  [ctx]
   (into {}
-        (let [all-events @registered-events
-              all-handlers @registered-handlers]
+        (let [all-events (::registered-events ctx {})
+              all-handlers (::registered-handlers ctx {})]
           (for [event-key (keys all-events)]
             (let [event (event-key all-events)
-                  options (or (:options event) {})
-                  min-handlers (or (:min-handlers options) 0)
-                  max-handlers (or (:max-handlers options) Integer/MAX_VALUE)
+                  options (:options event {})
+                  min-handlers (:min-handlers options 0)
+                  max-handlers (:max-handlers options Integer/MAX_VALUE)
                   handlers (event-key all-handlers)
                   num-handlers (count handlers)
                   errors []
@@ -221,32 +243,39 @@ that have errors."
                 nil
                 [event-key errors]))))))
 
-(defn- set-1-validation-fn! [event-key validator-fn override?]
-  (let [existing (get-in @registered-events [event-key :validation-fn])]
+(defn- set-1-validation-fn [ctx event-key validator-fn override?]
+  (let [existing (get-in ctx [::registered-events event-key :validation-fn])]
     (if (and existing (not= :override override?))
       (throw (Exception.
                (str "Cannot replace validation function on event "
                     event-key
                     ", override flag not specified."))))
-    (swap! registered-events assoc-in [event-key :validation-fn] validator-fn)))
+    (assoc-in ctx [::registered-events event-key :validation-fn] validator-fn)))
 
-(defn set-validation-fn!
+(defn set-validation-fn*
   "Sets the validation fn for a specific event or set of events. Pass nil as the
 validator function to disable validation."
-  [event-key validator-fn & [override?]]
-  (let [event-keys (if (set? event-key) event-key #{ event-key })]
-    (doseq [k event-keys]
-            (if-not (keyword? k) (throw (Exception. (str "Cannot set validation function: "
-                                                         (pr-str k) " is not a keyword"))))
-            (set-1-validation-fn! k validator-fn override?))))
+  ([ctx event-key validator-fn override?]
+    (let [event-keys (if (coll? event-key) event-key [event-key])]
+      (set-validation-fn* ctx (first event-keys) (next event-keys) validator-fn override?)))
+  ([ctx event-key event-keys validator-fn override?]
+    (if-not (keyword? event-key)
+      (throw (Exception. (str "Cannot set validation function: " (pr-str event-key) " is not a keyword"))))
+    (let [ctx (set-1-validation-fn ctx event-key validator-fn override?)]
+      (if event-keys
+        (recur ctx (first event-keys) (next event-keys) validator-fn override?)
+        ctx))))
+
+;; need a wrapper function to allow variadic + optional arg
+(defn set-validation-fn [ctx event-key validator-fn & [override?]]
+  (set-validation-fn* ctx event-key validator-fn override?))
 
 (defn validate-args
   "Check for a validation function and call it on the args, if present."
-  [event-key ctx args]
-  (let [event (event-key @registered-events)
-        validation-fn (:validation-fn event)]
-    (if (fn? validation-fn)
-      (validation-fn ctx args)
+  [ctx event-key args]
+  (let [vfn (get-in ctx [::registered-events event-key :validation-fn])]
+    (if (fn? vfn)
+      (vfn ctx args)
       (res/ok args))))
 
 (defn- run*
@@ -256,7 +285,7 @@ a handler returns anything other than an \"ok\" result, stop processing handlers
 and either fire the next event (on ok-go or fail-go), or return the error result
 (on fail). Args must pass validation as defined by validation-fn for this event,
 (if any)."
-  [handlers ctx args]
+  [ctx handlers args]
   (let [handler (first handlers)
         [handler-key handler-fn] handler
         handlers (rest handlers)
@@ -283,14 +312,14 @@ and either fire the next event (on ok-go or fail-go), or return the error result
                                                        (::errors ctx []))
                 error-event-key (:error-event-key handler-result)]
             (condp = status
-              :ok (recur handlers ctx data)
-              :ok-go (let [handlers (next-event-key @registered-handlers)
+              :ok (recur ctx handlers data)
+              :ok-go (let [handlers (get-in ctx [::registered-handlers next-event-key] [])
                            ctx (assoc ctx :event-key next-event-key)]
-                       (recur handlers ctx data))
+                       (recur ctx handlers data))
               :fail (assoc (res/fail error-key message data) ::context (assoc ctx ::errors error-stack))
-              :fail-go (let [handlers (error-event-key @registered-handlers)
+              :fail-go (let [handlers (get-in ctx [::registered-handlers error-event-key] [])
                              ctx (assoc ctx ::errors error-stack ::event-key error-event-key)]
-                         (recur handlers ctx data))
+                         (recur ctx handlers data))
               ; else
               (throw (Exception. (str "Invalid event-handler result: " (pr-str handler-result)))))))))))
 
@@ -302,20 +331,19 @@ dependencies), as well as any metadata related to event system execution.
 The args param is a map of key-value pairs that will be passed to each of the
 registered handlers. Returns the accumulated results of calling each of the
 handlers in turn."
-  [event-key ctx args]
-  (let [_ (or (event-key @registered-events)
-              (throw (Exception. (str "Event not defined: " event-key))))
-        handlers (event-key @registered-handlers)
+  [ctx event-key args]
+  (let [_ (throw-if-not-valid-event! ctx event-key nil)
+        handlers (get-in ctx [::registered-handlers event-key] [])
         num-handlers (count handlers)
-        ctx (assoc (or ctx {}) ::event-key event-key)]
+        ctx (assoc ctx ::event-key event-key)]
     (if (zero? num-handlers)
       (assoc (res/ok args) ::context ctx)
-      (run* handlers ctx args))))
+      (run* ctx handlers args))))
 
 (defn docs
   "Returns the doc string that was provided when the event was declared."  
-  [event-key]
-  (if-let [event (event-key @registered-events)]
+  [ctx event-key]
+  (if-let [event (get-in ctx [::registered-events event-key] [])]
     (or (:docstring event) (str "Event " (name event-key) " has no docs."))
     (str "Unknown event " event-key)))
 

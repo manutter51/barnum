@@ -16,19 +16,19 @@ The remaining parameters to def-event specify the keys that should be
 present in the map that gets passed to registered event handlers when
 the event is fired or polled. Throws an exception if you try to declare the
 same event more than once."
-  [event-key & params]
-  (ev/register-event event-key (vec params)))
+  [ctx event-key & params]
+  (ev/register-event ctx event-key (vec params)))
 
 (defn event-keys
   "Returns a list of all currently defined event keys."
-  []
-  (keys @ev/registered-events))
+  [ctx]
+  (keys (::ev/registered-events ctx [])))
 
 (defn handler-keys
   "Returns a list of all currently defined handler keys for the given event.
 Throws an exception if the specified event does not exist."
-  [event-key]
-  (ev/handler-keys event-key))
+  [ctx event-key]
+  (ev/handler-keys ctx event-key))
 
 (defn add-handler
   "Registers a handler for the given event key(s). The event key can be a
@@ -39,46 +39,46 @@ order-last. Handler functions take a single arg: a map containing the keys
 given when the event was defined, and their values. Throws an exception if
 you try to declare the same handler key more than once for the same
 event."
-  [event-key handler-key handler-fn]
-  (ev/register-handler event-key handler-key handler-fn))
+  [ctx event-key handler-key handler-fn]
+  (ev/register-handler ctx event-key handler-key handler-fn))
 
 (defn remove-handler
   "Removes a given handler from a given event or set of events. If
 the given handler is not assigned to the given event, the call
 succeeds silently and does not change the list of registered handlers."
-  [event-key handler-key]
-  (ev/remove-handler event-key handler-key))
+  [ctx event-key handler-key]
+  (ev/remove-handler ctx event-key handler-key))
 
 (defn replace-handler
   "If the handler key exists for the given event, replaces that handler
 with the given handler function. If the handler key has not been assigned
 to that event, the call silently succeeds without changing the list of
 registered handlers"
-  [event-key handler-key handler-fn]
-  (ev/replace-handler event-key handler-key handler-fn))
+  [ctx event-key handler-key handler-fn]
+  (ev/replace-handler ctx event-key handler-key handler-fn))
 
 (defn add-or-replace-handler
   "Adds the given handler to the given event, replacing any previous handler
 with the same handler key."
-  [event-key handler-key handler-fn]
-  (ev/remove-handler event-key handler-key)
-  (ev/register-handler event-key handler-key handler-fn))
+  [ctx event-key handler-key handler-fn]
+  (ev/remove-handler ctx event-key handler-key)
+  (ev/register-handler ctx event-key handler-key handler-fn))
 
 (defn order-first
   "Re-orders the handlers for the given event so that they occur in the
 same order as in the given vector of handler keys. Any handlers not listed
 in the given vector will be appended to the end of the list in their original
 order."
-  [event-key handler-key-list]
-  (ev/order-first event-key handler-key-list))
+  [ctx event-key handler-key-list]
+  (ev/order-first ctx event-key handler-key-list))
 
 (defn order-last
   "Re-orders the handlers for the given event so that they occur in the
 same order as in the given vector of handler keys. Any handlers not listed
 in the given vector will be prepended to the beginning of the list in their
 original order."
-  [event-key handler-key-list]
-  (ev/order-last event-key handler-key-list))
+  [ctx event-key handler-key-list]
+  (ev/order-last ctx event-key handler-key-list))
 
 (defn check
   "Checks the current event map and ensures that each event has at least
@@ -86,10 +86,10 @@ the minimum number of handlers specified in the min-handlers option, but
 no more than the maximum number of handlers specified in the max-handlers
 option. Returns a map of event keys mapped to error messages, for any events
 that have errors."
-  []
-  (ev/check))
+  [ctx]
+  (ev/check ctx))
 
-(defn set-validation-fn!
+(defn set-validation-fn
   "Sets the validation function to be used to validate the event data being
 passed to an event handler. Your validation function should take 2 arguments,
 `ctx` (a map containing application-specific context) and data (the values to
@@ -105,8 +105,8 @@ function.
 
 To attach the same validation function to multiple events, pass a set of event
 keys as the first argument."
-  [event-key validation-fn & [override?]]
-  (ev/set-validation-fn! event-key validation-fn override?))
+  [ctx event-key validation-fn & [override?]]
+  (ev/set-validation-fn ctx event-key validation-fn override?))
 
 (defn fire
   "Attempts to fire the given event using the given args (specified as a map of
@@ -120,17 +120,15 @@ Exception if the event has not been defined with add-event.
 Takes an optional Barnum context (hash-map) as the second argument. The Barnum
 event engine uses this internally to compile a history of events and/or errors
 that occur during event handling."
-  [event-key & args]
-  (let [first-arg (first args)
-        [ctx args] (if (keyword? first-arg) [{} args] [first-arg (next args)])
-        args (apply hash-map args)]
-    (ev/fire event-key ctx args)))
+  [ctx event-key & args]
+  (let [args (apply hash-map args)]
+    (ev/fire ctx event-key args)))
 
 (defn docs
   "Returns the docstring supplied when the event was added, plus a list
 of params and defaults to be supplied when the event is fired."
-  [event-key]
-  (ev/docs event-key))
+  [ctx event-key]
+  (ev/docs ctx event-key))
 
 (defn ok
   "Returns a correctly-formatted tuple containing the handler status (ok)
