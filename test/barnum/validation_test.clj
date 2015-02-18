@@ -3,8 +3,8 @@
             [barnum.api :refer :all]
             [barnum.events.validation :refer :all]))
 
-(defn do-nothing-handler [args]
-  (ok))
+(defn do-nothing-handler [ctx args]
+  (ok ctx))
 
 ;; TODO Refactor this to use separate fn for setting validation fn
 

@@ -280,20 +280,19 @@ keys, in order"
 )
 
 ;; event handler check function
-#_(with-state-changes [(before :facts
-                             (do
-                               (dosync (ref-set registered-handlers {}))
-                               (reset! registered-events {})
-                               (register-event :e1 ["Event 1" :max-handlers 2])
-                               (register-event :e2 ["Event 2"])
-                               (register-event :e3 ["Event 2" :min-handlers 1])
-                               (register-handler #{:e1 :e2} :h1 identity)
-                               (register-handler :e1 :h2 identity)
-                               (register-handler :e1 :h3 identity)
-                               (register-handler :e2 :h4 identity)))]
+(with-state-changes
+  [(before :facts
+           (reset! ctx (-> {}
+                           (register-event :e1 ["Event 1" :max-handlers 2])
+                           (register-event :e2 ["Event 2"])
+                           (register-event :e3 ["Event 2" :min-handlers 1])
+                           (register-handler #{:e1 :e2} :h1 identity)
+                           (register-handler :e1 :h2 identity)
+                           (register-handler :e1 :h3 identity)
+                           (register-handler :e2 :h4 identity))))]
 
   (fact "The check function returns correct messages for events with too many or too few handlers"
-        (let [errors (check)]
+        (let [errors (check @ctx)]
           
           (:e1 errors)
           => ["The :e1 event can have at most 2 handler(s), has 3"]
@@ -327,54 +326,54 @@ keys, in order"
 
 (def initial-data {:key "value"})
 
-#_(with-state-changes
+(with-state-changes
   [(before :facts
-           (do
-             (dosync
-               (ref-set registered-handlers {}))
-             (reset! registered-events {})
-             (register-event :e1 ["Event 1"])
-             (register-event :e2 ["Event 2"])
-             (register-event :on-error-2 ["Error handler 2"])))]
+           (reset! ctx (-> {}
+                           (register-event :e1 ["Event 1"])
+                           (register-event :e2 ["Event 2"])
+                           (register-event :on-error-2 ["Error handler 2"]))))]
 
   (fact
     "Handlers fire in the order they are defined."
-    (register-handler :e1 :h1 sets-A-and-continues)
-    (register-handler :e1 :h2 sets-C-and-continues)
-    (register-handler :e1 :h3 sets-D-and-continues)
+    (let [ctx (-> @ctx
+                  (register-handler :e1 :h1 sets-A-and-continues)
+                  (register-handler :e1 :h2 sets-C-and-continues)
+                  (register-handler :e1 :h3 sets-D-and-continues))]
+      (:data (fire ctx :e1 initial-data))
+           => {:key "value" :a "A" :c "C" :d "D"}))
 
-    (:data (fire :e1 {} initial-data))
-    => {:key "value" :a "A" :c "C" :d "D"})
+
+
 
   (fact
     "When a handler returns ok-go, any remaining handlers are skipped, and the specified event fires"
-    (register-handler :e1 :h1 sets-A-and-continues)
-    (register-handler :e1 :h2 sets-B-and-jumps)
-    (register-handler :e1 :h3 sets-C-and-continues)
-    (register-handler :e2 :h1 sets-D-and-continues)
+    (let [ctx (-> @ctx
+                  (register-handler :e1 :h1 sets-A-and-continues)
+                  (register-handler :e1 :h2 sets-B-and-jumps)
+                  (register-handler :e1 :h3 sets-C-and-continues)
+                  (register-handler :e2 :h1 sets-D-and-continues))]
+      (:data (fire ctx :e1 initial-data))
+      => {:key "value" :a "A" :b "B" :d "D"}))
 
-    (:data (fire :e1 {} initial-data))
-    => {:key "value" :a "A" :b "B" :d "D"})
 
   (fact
     "When a handler returns fail, any remaining handlers are skipped"
-    (register-handler :e1 :h1 sets-A-and-continues)
-    (register-handler :e1 :h2 fails-and-sets-e1)
-    (register-handler :e1 :h3 sets-C-and-continues)
+    (let [ctx (-> @ctx
+                  (register-handler :e1 :h1 sets-A-and-continues)
+                  (register-handler :e1 :h2 fails-and-sets-e1)
+                  (register-handler :e1 :h3 sets-C-and-continues))]
+      (:data (fire ctx :e1 initial-data))
+      => {:key "value" :a "A"}
 
-    (:data (fire :e1 {} initial-data))
-    => {:key "value" :a "A"}
+      ;; actual log looks something like this: [[1423352071475 :e1 :h1] [1423352071475 :e1 :h2]]
+      ;; We'll take each log entry, skip the timestamp (since it varies), and just check the last 2 values
+      (let [log (get-in (fire ctx :e1 initial-data) [:barnum.events/context :barnum.events/log])
+            log1 (first log)
+            log2 (second log)]
+        (next log1)
+        => [:e1 :h1]
 
-    ;; actual log looks something like this: [[1423352071475 :e1 :h1] [1423352071475 :e1 :h2]]
-    ;; We'll take each log entry, skip the timestamp (since it varies), and just check the last 2 values
-    (let [log (get-in (fire :e1 {} initial-data) [:barnum.events/context :barnum.events/log])
-          log1 (first log)
-          log2 (second log)]
-      (next log1)
-      => [:e1 :h1]
-
-      (next log2)
-      => [:e1 :h2]))
-
+        (next log2)
+        => [:e1 :h2])))
   )
 
