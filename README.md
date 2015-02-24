@@ -213,7 +213,7 @@ Event handlers must use functions from the `barnum.results` namespace to return 
 results produced by the handler.
 
 To write an event handler, `require` the `barnum.results` namespace, and then
-use the `ok`, `ok-go`, `fail`,  and `fail-go` functions to wrap any data
+use the `ok`, `ok-go`, `ok-return`, `fail`,  and `fail-go` functions to wrap any data
 returned by your handler.
 
 The `ok` function takes one argument: the data to be returned by event handler.
@@ -230,6 +230,10 @@ more handlers.
         (if data
           (ok args)
           (ok (assoc args :data :default-value))))
+
+The `ok-return` function works like the `ok` function, except that if you have multiple
+handlers for an event, an `ok-return` result means that you've handled the event in the
+current handler, and no further handlers should be called.
 
 The `ok-go` function takes two arguments: the event key for the next event to
 fire, and the data to be returned by your handler. When you return an `ok-go`

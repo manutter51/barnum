@@ -11,6 +11,10 @@
    :next next-event-key
    :data data})
 
+(defn ok-return [data]
+  {:status :ok-return
+   :data data})
+
 (defn fail [error-key error-message data]
   {:status :fail
    :error-key error-key

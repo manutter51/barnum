@@ -16,6 +16,10 @@
       (res/ok-go dummy-data :next-event)
       => (throws Exception #"Expected event key for next event to fire; got class clojure.lang.PersistentHashMap"))
 
+(fact "about the base ok-return fn"
+      (res/ok-return dummy-data)
+      => (exactly {:data dummy-data :status :ok-return}))
+
 (fact "about the base fail fn"
       (res/fail :an-error "Error" dummy-data)
       => (exactly {:status :fail :error-key :an-error :message "Error" :data dummy-data}))

@@ -1,7 +1,7 @@
 (ns barnum.events-test
   (:require [midje.sweet :refer :all]
             [barnum.events :refer :all]
-            [barnum.results :refer [ok ok-go fail fail-go]]))
+            [barnum.results :refer [ok ok-go ok-return fail fail-go]]))
 
 (fact "build-event-def returns appropriate event structures"
       (build-event-def
@@ -312,6 +312,9 @@ keys, in order"
 (defn sets-B-and-jumps [ctx data]
   (ok-go :e2 (assoc data :b "B")))
 
+(defn sets-B-and-returns [ctx data]
+  (ok-return (assoc data :b "B")))
+
 (defn sets-C-and-continues [ctx data]
   (ok (assoc data :c "C")))
 
@@ -355,6 +358,14 @@ keys, in order"
       (:data (fire ctx :e1 initial-data))
       => {:key "value" :a "A" :b "B" :d "D"}))
 
+  (fact
+    "When a handler returns ok-return, any remaining handlers are skipped, and the specified event fires"
+    (let [ctx (-> @ctx
+                  (register-handler :e1 :h1 sets-A-and-continues)
+                  (register-handler :e1 :h2 sets-B-and-returns)
+                  (register-handler :e1 :h3 sets-C-and-continues))]
+      (:data (fire ctx :e1 initial-data))
+      => (exactly {:key "value" :a "A" :b "B"})))
 
   (fact
     "When a handler returns fail, any remaining handlers are skipped"

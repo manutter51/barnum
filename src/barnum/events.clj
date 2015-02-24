@@ -316,6 +316,7 @@ and either fire the next event (on ok-go or fail-go), or return the error result
               :ok-go (let [handlers (get-in ctx [::registered-handlers next-event-key] [])
                            ctx (assoc ctx :event-key next-event-key)]
                        (recur ctx handlers data))
+              :ok-return (assoc (res/ok data) ::context ctx)
               :fail (assoc (res/fail error-key message data) ::context (assoc ctx ::errors error-stack))
               :fail-go (let [handlers (get-in ctx [::registered-handlers error-event-key] [])
                              ctx (assoc ctx ::errors error-stack ::event-key error-event-key)]
