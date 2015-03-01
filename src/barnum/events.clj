@@ -341,6 +341,25 @@ handlers in turn."
       (assoc (res/ok args) ::context ctx)
       (run* ctx handlers args))))
 
+
+(defn fire-all
+  "Triggers a series of events, such that each successive event receives
+the data returned by the previous event. If any event in the series returns
+a fail result, fire-all returns the failed result immediately, without firing
+any of the subsequent events."
+  [ctx event-keys args]
+  (loop [ctx ctx, next-key (first event-keys), todo (next event-keys), args args]
+    (if (nil? next-key)
+      (assoc (res/ok args) ::context ctx)
+      (let [handler-result (fire ctx next-key args)]
+        ;; fire will only ever return an :ok result or a :fail result
+        (if (= :ok (:status handler-result))
+          (recur (::context handler-result)
+                 (first todo)
+                 (next todo)
+                 (:data handler-result))
+          handler-result)))))
+
 (defn docs
   "Returns the doc string that was provided when the event was declared."  
   [ctx event-key]

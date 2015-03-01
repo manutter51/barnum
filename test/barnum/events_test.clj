@@ -306,6 +306,10 @@ keys, in order"
 ;; firing event handlers
 ;;   -- generic handlers
 
+(defn sets-any-and-continues [any]
+  (fn [ctx data]
+    (ok (assoc data (keyword (clojure.string/lower-case any)) (clojure.string/capitalize any)))))
+
 (defn sets-A-and-continues [ctx data]
   (ok (assoc data :a "A")))
 
@@ -339,11 +343,11 @@ keys, in order"
   (fact
     "Handlers fire in the order they are defined."
     (let [ctx (-> @ctx
-                  (register-handler :e1 :h1 sets-A-and-continues)
-                  (register-handler :e1 :h2 sets-C-and-continues)
-                  (register-handler :e1 :h3 sets-D-and-continues))]
+                  (register-handler :e1 :h1 (sets-any-and-continues "a"))
+                  (register-handler :e1 :h2 (sets-any-and-continues "b"))
+                  (register-handler :e1 :h3 (sets-any-and-continues "c")))]
       (:data (fire ctx :e1 initial-data))
-           => {:key "value" :a "A" :c "C" :d "D"}))
+           => {:key "value" :a "A" :b "B" :c "C"}))
 
 
 
@@ -388,3 +392,24 @@ keys, in order"
         => [:e1 :h2])))
   )
 
+(with-state-changes
+  [(before :facts
+           (reset! ctx (-> {}
+                           (register-event :e1 ["Event 1"])
+                           (register-event :e2 ["Event 2"])
+                           (register-event :e3 ["Event 3"])
+                           (register-event :e4 ["Event 4"])
+                           (register-event :on-error ["Error handler"]))))]
+
+  (fact
+    "The fail-all fn calls a series of events"
+    (let [ctx (-> @ctx
+                  (register-handler :e1 :h1 (sets-any-and-continues "a"))
+                  (register-handler :e2 :h1 (sets-any-and-continues "b"))
+                  (register-handler :e3 :h1 (sets-any-and-continues "c"))
+                  (register-handler :e4 :h1 (sets-any-and-continues "d")))
+          result (fire-all ctx [:e1 :e2 :e3 :e4] {})]
+      #_(prn (dissoc result :barnum.events/context))
+      (:data result)
+      => (contains {:a "A" :b "B" :c "C" :d "D"} :in-any-order)))
+  )
