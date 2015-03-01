@@ -124,6 +124,15 @@ that occur during event handling."
   (let [args (apply hash-map args)]
     (ev/fire ctx event-key args)))
 
+(defn fire-all
+  "Triggers a series of events, such that each successive event receives
+the data returned by the previous event. If any event in the series returns
+a fail result, fire-all returns the failed result immediately, without firing
+any of the subsequent events."
+  [ctx event-keys & args]
+  (let [args (apply hash-map args)]
+    (ev/fire-all ctx event-keys args)))
+
 (defn docs
   "Returns the docstring supplied when the event was added, plus a list
 of params and defaults to be supplied when the event is fired."
