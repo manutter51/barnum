@@ -289,37 +289,37 @@ and either fire the next event (on ok-go or fail-go), or return the error result
   (let [handler (first handlers)
         [handler-key handler-fn] handler
         handlers (rest handlers)
-        event-key (::event-key ctx ::no-event)
+        event-key (:barnum.api/event-key ctx ::no-event)
         log (::log ctx [])
         log (conj log [(System/currentTimeMillis) event-key handler-key])
         ctx (assoc ctx ::handler-key handler-key ::log log)]
     (if (nil? handler-fn)
-      (assoc (res/ok args) ::context ctx)
+      (assoc (res/ok args) :barnum.api/context ctx)
       (let [validation-result (validate-args event-key ctx args)
             validation-status (:status validation-result)
             errors (:errors validation-result)
             data (:data validation-result)]
         (if-not (= :ok validation-status)
-          (assoc (res/not-valid errors data) ::context ctx)
+          (assoc (res/not-valid errors data) :barnum.api/context ctx)
           (let [handler-result (handler-fn ctx data)
                 status (:status handler-result)
                 data (:data handler-result)
                 next-event-key (:next handler-result)
                 error-key (:error-key handler-result)
                 message (:message handler-result)
-                error-frame [(System/currentTimeMillis) (::event-key ctx) (::handler-key ctx) error-key message]
-                error-stack (if (or error-key message) (conj (::errors ctx []) error-frame)
-                                                       (::errors ctx []))
+                error-frame [(System/currentTimeMillis) (:barnum.api/event-key ctx) (::handler-key ctx) error-key message]
+                error-stack (if (or error-key message) (conj (:barnum.api/errors ctx []) error-frame)
+                                                       (:barnum.api/errors ctx []))
                 error-event-key (:error-event-key handler-result)]
             (condp = status
               :ok (recur ctx handlers data)
               :ok-go (let [handlers (get-in ctx [::registered-handlers next-event-key] [])
                            ctx (assoc ctx :event-key next-event-key)]
                        (recur ctx handlers data))
-              :ok-return (assoc (res/ok data) ::context ctx)
-              :fail (assoc (res/fail error-key message data) ::context (assoc ctx ::errors error-stack))
+              :ok-return (assoc (res/ok data) :barnum.api/context ctx)
+              :fail (assoc (res/fail error-key message data) :barnum.api/context (assoc ctx :barnum.api/errors error-stack))
               :fail-go (let [handlers (get-in ctx [::registered-handlers error-event-key] [])
-                             ctx (assoc ctx ::errors error-stack ::event-key error-event-key)]
+                             ctx (assoc ctx :barnum.api/errors error-stack :barnum.api/event-key error-event-key)]
                          (recur ctx handlers data))
               ; else
               (throw (Exception. (str "Invalid event-handler result: " (pr-str handler-result)))))))))))
@@ -336,9 +336,9 @@ handlers in turn."
   (let [_ (throw-if-not-valid-event! ctx event-key nil)
         handlers (get-in ctx [::registered-handlers event-key] [])
         num-handlers (count handlers)
-        ctx (assoc ctx ::event-key event-key)]
+        ctx (assoc ctx :barnum.api/event-key event-key)]
     (if (zero? num-handlers)
-      (assoc (res/ok args) ::context ctx)
+      (assoc (res/ok args) :barnum.api/context ctx)
       (run* ctx handlers args))))
 
 
@@ -350,11 +350,11 @@ any of the subsequent events."
   [ctx event-keys args]
   (loop [ctx ctx, next-key (first event-keys), todo (next event-keys), args args]
     (if (nil? next-key)
-      (assoc (res/ok args) ::context ctx)
+      (assoc (res/ok args) :barnum.api/context ctx)
       (let [handler-result (fire ctx next-key args)]
         ;; fire will only ever return an :ok result or a :fail result
         (if (= :ok (:status handler-result))
-          (recur (::context handler-result)
+          (recur (:barnum.api/context handler-result)
                  (first todo)
                  (next todo)
                  (:data handler-result))

@@ -382,7 +382,8 @@ keys, in order"
 
       ;; actual log looks something like this: [[1423352071475 :e1 :h1] [1423352071475 :e1 :h2]]
       ;; We'll take each log entry, skip the timestamp (since it varies), and just check the last 2 values
-      (let [log (get-in (fire ctx :e1 initial-data) [:barnum.events/context :barnum.events/log])
+      (let [result (fire ctx :e1 initial-data)
+            log (get-in result [:barnum.api/context :barnum.events/log])
             log1 (first log)
             log2 (second log)]
         (next log1)
@@ -409,7 +410,7 @@ keys, in order"
                   (register-handler :e3 :h1 (sets-any-and-continues "c"))
                   (register-handler :e4 :h1 (sets-any-and-continues "d")))
           result (fire-all ctx [:e1 :e2 :e3 :e4] {})]
-      #_(prn (dissoc result :barnum.events/context))
+      #_(prn (dissoc result :barnum.api/context))
       (:data result)
       => (contains {:a "A" :b "B" :c "C" :d "D"} :in-any-order)))
   )

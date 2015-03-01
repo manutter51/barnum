@@ -22,7 +22,7 @@ same event more than once."
 (defn event-keys
   "Returns a list of all currently defined event keys."
   [ctx]
-  (keys (::ev/registered-events ctx [])))
+  (keys (:barnum.events/registered-events ctx [])))
 
 (defn handler-keys
   "Returns a list of all currently defined handler keys for the given event.

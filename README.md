@@ -52,7 +52,7 @@ to the handler function. The handler function will do whatever processing is nec
 and then return a result. The result will always be a map containing predefined keys
 for `:status` and `:data`, as well as any additional keys like `:next` containing the
 next event to fire, or `:message` for any error messages. The result map will also
-contain a key of `:barnum.events/context` containing information about the details of
+contain a key of `:barnum.api/context` containing information about the details of
 event handling, such as which handlers were fired, what time (in milliseconds) each
 handler began, and any errors which arose.
 
@@ -259,14 +259,14 @@ includes the error key, error message, and data under they keys `:error-key`,
 current event, they will _not_ be executed; a `fail` is returned immediately
 to the calling function.
 
-The `:barnum.events/errors` key points to a vector of tuples containing the
+The `:barnum.api/errors` key points to a vector of tuples containing the
 system time in millis, the event key, the event handler key, the error key,
 and the text of the error message. For example, if you had an event named
 `:my-risky-event`, and you registered a handler named `:my-error-prone-handler`,
 returning `(fail :some-error "it died" data)` would produce a value for `data`
 that looked like this:
 
-    {:barnum.events/errors
+    {:barnum.api/errors
       [[1423567342887 :my-risky-event :my-error-prone-handler some-error "it died"]]
      ; whatever else was in data
      }
