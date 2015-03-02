@@ -109,29 +109,23 @@ keys as the first argument."
   (ev/set-validation-fn ctx event-key validation-fn override?))
 
 (defn fire
-  "Attempts to fire the given event using the given args (specified as a map of
-key-value pairs), after first supplying any default values and then
-validating the args with the validation function supplied when the event
-was added (if any).  Returns a map containing the status of the last event handler
-to fire plus the data returned by the handler. If no handler is defined for the
-given event, returns a status of :ok, plus the unmodified original data. Throws an
-Exception if the event has not been defined with add-event.
-
-Takes an optional Barnum context (hash-map) as the second argument. The Barnum
-event engine uses this internally to compile a history of events and/or errors
-that occur during event handling."
-  [ctx event-key & args]
-  (let [args (apply hash-map args)]
-    (ev/fire ctx event-key args)))
+  "Attempts to fire the given event in the given context using the given args
+(specified as a map of key-value pairs), after validating the args with the
+validation function (if any). Returns a map containing the status of the last
+event handler to fire plus the data returned by the handler. If no handler is
+defined for the given event, returns a map with a :status of :ok, plus the
+unmodified original data under the :data key. Throws an Exception if the event
+has not been defined with add-event."
+  [ctx event-key  args]
+  (ev/fire ctx event-key args))
 
 (defn fire-all
   "Triggers a series of events, such that each successive event receives
 the data returned by the previous event. If any event in the series returns
 a fail result, fire-all returns the failed result immediately, without firing
 any of the subsequent events."
-  [ctx event-keys & args]
-  (let [args (apply hash-map args)]
-    (ev/fire-all ctx event-keys args)))
+  [ctx event-keys args]
+  (ev/fire-all ctx event-keys args))
 
 (defn docs
   "Returns the docstring supplied when the event was added, plus a list

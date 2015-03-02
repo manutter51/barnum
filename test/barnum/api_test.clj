@@ -309,7 +309,7 @@ keys, in order"
                   (add-handler :e1 :h1 sets-A-and-continues)
                   (add-handler :e1 :h2 sets-C-and-continues)
                   (add-handler :e1 :h3 sets-D-and-continues))]
-      (:data (fire ctx :e1 :key "value"))
+      (:data (fire ctx :e1 {:key "value"}))
       => {:key "value" :a "A" :c "C" :d "D"}))
 
 
@@ -321,7 +321,7 @@ keys, in order"
                   (add-handler :e1 :h2 sets-B-and-jumps)
                   (add-handler :e1 :h3 sets-C-and-continues)
                   (add-handler :e2 :h1 sets-D-and-continues))]
-      (:data (fire ctx :e1 :key "value"))
+      (:data (fire ctx :e1 {:key "value"}))
       => {:key "value" :a "A" :b "B" :d "D"}))
 
   (fact
@@ -330,6 +330,6 @@ keys, in order"
                   (add-handler :e1 :h1 sets-A-and-continues)
                   (add-handler :e1 :h2 fails-and-sets-e1)
                   (add-handler :e1 :h3 sets-C-and-continues))]
-      (:data (fire ctx :e1 :key "value"))
+      (:data (fire ctx :e1 {:key "value"}))
       => {:key "value" :a "A"}))
   )
