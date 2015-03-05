@@ -134,7 +134,7 @@ of params and defaults to be supplied when the event is fired."
   (ev/docs ctx event-key))
 
 (defn ok
-  "Returns a correctly-formatted tuple containing the handler status (ok)
+  "Returns a correctly-formatted map containing the handler status (ok)
 and the processed data. Used by event handlers to return results to the
 Barnum event engine. Data will be passed to the next handler for this
 event, if any, or returned to the function that fired the original event
@@ -143,13 +143,28 @@ if there are no more handlers to call."
   (res/ok data))
 
 (defn ok-go
-  "Returns a correctly-formatted tuple containing the handler status (ok),
+  "Returns a correctly-formatted map containing the handler status (ok),
 the event key for the next event to be fired, and the processed data. Used
 by event handlers to return results to the Barnum event engine and trigger
 a follow-up event without consuming stack space that might lead to a stack
 overflow. Any additional handlers for the current event will be skipped."
   [next-event-key data]
   (res/ok-go next-event-key data))
+
+(defn ok-return
+  "Returns a correctly-formatted map containing the handler status (ok-return)
+and the processed data. Used by event handlers to indicate that the event has
+been handled and that no further handlers should be called for this event."
+  [data]
+  (res/ok-return data))
+
+(defn return
+  "Alias for barnum.results/ok-return. Returns a correctly-formatted map
+containing the handler status (ok-return) and the processed data. Used by
+event handlers to indicate that the event has beenhandled and that no further
+handlers should be called for this event."
+  [data]
+  (res/ok-return data))
 
 (defn fail
   "Returns a correctly-formatted tuple containing the handler status (fail)
