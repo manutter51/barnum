@@ -126,8 +126,10 @@ has not been defined with add-event."
 the data returned by the previous event. If any event in the series returns
 a fail result, fire-all returns the failed result immediately, without firing
 any of the subsequent events."
-  [ctx event-keys args]
-  (ev/fire-all ctx event-keys args))
+  ([ctx event-keys]
+    (fire-all ctx event-keys {}))
+  ([ctx event-keys args]
+   (ev/fire-all ctx event-keys args)))
 
 (defn docs
   "Returns the docstring supplied when the event was added, plus a list
