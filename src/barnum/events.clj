@@ -67,7 +67,7 @@
 (defn- throw-if-not-valid-event! [ctx event-key handler-key]
   (when (nil? (event-key (::registered-events ctx {})))
     (if (nil? handler-key)
-      (throw (Exception. (str "Unknown event " (pr-str event-key))))
+      (throw (Exception. (str "Unknown event " (pr-str event-key) " (" (pr-str (keys (::registered-events ctx))) ")")))
       (throw (Exception. (str "Handler " handler-key
                               " cannot be used with unknown event " event-key))))))
 
