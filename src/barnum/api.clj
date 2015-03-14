@@ -116,8 +116,10 @@ event handler to fire plus the data returned by the handler. If no handler is
 defined for the given event, returns a map with a :status of :ok, plus the
 unmodified original data under the :data key. Throws an Exception if the event
 has not been defined with add-event."
-  [ctx event-key  args]
-  (ev/fire ctx event-key args))
+  ([ctx event-key]
+    (fire ctx event-key {}))
+  ([ctx event-key  args]
+   (ev/fire ctx event-key args)))
 
 (defn fire-all
   "Triggers a series of events, such that each successive event receives
